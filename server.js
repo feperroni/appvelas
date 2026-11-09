@@ -40,6 +40,9 @@ async function prepararBanco() {
           dias      JSONB NOT NULL DEFAULT '[]',
           criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS financeiro JSONB;
+        ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT '';
+        ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now();
         CREATE INDEX IF NOT EXISTS pedidos_data_idx ON pedidos (data DESC);
         CREATE TABLE IF NOT EXISTS config (
           chave TEXT PRIMARY KEY,
@@ -71,6 +74,21 @@ function validarItens(lista) {
   return out;
 }
 
+// Financeiro do pedido: { kgPalito, valorPalito, valorDias } — cada um número ou null.
+// Retorna undefined se inválido; null se não houver nada preenchido.
+function validarFin(f) {
+  if (f == null) return null;
+  if (typeof f !== "object") return undefined;
+  const out = {};
+  for (const k of ["kgPalito", "valorPalito", "valorDias"]) {
+    const v = f[k];
+    if (v == null) { out[k] = null; continue; }
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10_000_000) return undefined;
+    out[k] = Math.round(v * 1000) / 1000;
+  }
+  return Object.values(out).some((v) => v != null) ? out : null;
+}
+
 function validarPedido(p) {
   if (!p || typeof p !== "object") return null;
   if (typeof p.id !== "string" || !p.id || p.id.length > 64) return null;
@@ -78,8 +96,12 @@ function validarPedido(p) {
   if (isNaN(data)) return null;
   const palito = validarItens(p.palito);
   const dias = validarItens(p.dias);
-  if (!palito || !dias) return null;
-  return { id: p.id, data, cliente: texto(p.cliente, 200), obs: texto(p.obs, 1000), palito, dias };
+  const fin = validarFin(p.fin);
+  if (!palito || !dias || fin === undefined) return null;
+  return {
+    id: p.id, data, nome: texto(p.nome, 200), cliente: texto(p.cliente, 200), obs: texto(p.obs, 1000),
+    palito, dias, fin,
+  };
 }
 
 function validarCores(cores) {
@@ -108,7 +130,8 @@ app.use("/api", (req, res, next) => {
 });
 
 const linhaParaPedido = (r) => ({
-  id: r.id, data: r.data.toISOString(), cliente: r.cliente, obs: r.obs, palito: r.palito, dias: r.dias,
+  id: r.id, data: r.data.toISOString(), nome: r.nome, cliente: r.cliente, obs: r.obs,
+  palito: r.palito, dias: r.dias, fin: r.financeiro ?? null,
 });
 
 app.get("/api/pedidos", async (req, res, next) => {
@@ -118,8 +141,8 @@ app.get("/api/pedidos", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Recebe um ou vários pedidos. Pedidos que já existem (mesmo id) são ignorados,
-// então reenviar é seguro.
+// Recebe um ou vários pedidos (novos ou editados). Se o id já existe, o pedido
+// é atualizado; então reenviar é seguro.
 app.post("/api/pedidos", async (req, res, next) => {
   const lista = Array.isArray(req.body?.pedidos) ? req.body.pedidos : [req.body];
   if (lista.length > 5000) return res.status(400).json({ erro: "Pedidos demais de uma vez" });
@@ -128,17 +151,20 @@ app.post("/api/pedidos", async (req, res, next) => {
   const cliente = await pool.connect();
   try {
     await cliente.query("BEGIN");
-    let inseridos = 0;
     for (const p of validos) {
-      const r = await cliente.query(
-        `INSERT INTO pedidos (id, data, cliente, obs, palito, dias)
-         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
-        [p.id, p.data, p.cliente, p.obs, JSON.stringify(p.palito), JSON.stringify(p.dias)]
+      await cliente.query(
+        `INSERT INTO pedidos (id, data, cliente, obs, palito, dias, financeiro, nome)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET
+           data = EXCLUDED.data, nome = EXCLUDED.nome, cliente = EXCLUDED.cliente, obs = EXCLUDED.obs,
+           palito = EXCLUDED.palito, dias = EXCLUDED.dias, financeiro = EXCLUDED.financeiro,
+           atualizado_em = now()`,
+        [p.id, p.data, p.cliente, p.obs, JSON.stringify(p.palito), JSON.stringify(p.dias),
+         p.fin ? JSON.stringify(p.fin) : null, p.nome]
       );
-      inseridos += r.rowCount;
     }
     await cliente.query("COMMIT");
-    res.json({ ok: true, recebidos: validos.length, inseridos });
+    res.json({ ok: true, gravados: validos.length });
   } catch (e) {
     await cliente.query("ROLLBACK").catch(() => {});
     next(e);

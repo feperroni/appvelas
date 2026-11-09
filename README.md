@@ -4,14 +4,15 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 
 ## Funções
 - Lista de cores com quantidade para Palito e 7 Dias (o pedido em andamento fica salvo no celular).
-- Campo opcional de cliente/terreiro e observações.
+- Campos opcionais: nome do pedido (ex.: "Festa de Ogum"), cliente/terreiro e observações.
+- **Financeiro** (opcional) em cada pedido: KG de palito, valor pago no palito e valor pago nas 7 Dias. O app calcula o R$/kg, o R$ por vela 7 Dias e o valor total.
 - Adicionar cores, editar o nome (✎) ou remover (✕) qualquer cor. O link "Restaurar cores padrão" volta à lista original.
 - **Texto**: abre uma caixa com o pedido pronto para copiar e colar no WhatsApp.
 - **PDF**: as duas tabelas lado a lado, só com as cores preenchidas, com totais.
 - **Excel**: aba `Palito` e aba `7 Dias`, com totais.
 - **Guardar**: salva o pedido no **Histórico** e começa um novo.
-- **Histórico**: ver cada pedido, exportar de novo (Texto/PDF/Excel), repetir ou excluir. Excel com todos os pedidos, backup e restauração.
-- **Estatísticas**: total de pedidos e velas, média por pedido, pedidos por mês, velas por mês (Palito × 7 Dias) e cores mais pedidas, com filtro de período.
+- **Histórico**: busca por nome, cliente, data ou cor; ver cada pedido, **editar**, exportar de novo (Texto/PDF/Excel), repetir ou excluir. Excel com todos os pedidos (incluindo o financeiro), backup e restauração.
+- **Estatísticas**: total de pedidos e velas, gasto total, gasto com palito e com 7 Dias, KG comprados, preço médio do kg e da vela 7 Dias, gasto por mês, pedidos por mês, velas por mês e cores mais pedidas, com filtro de período.
 - Com o servidor (Railway + Postgres), **pedidos e lista de cores ficam no banco e são compartilhados entre os celulares**. Sem internet, o pedido guardado fica pendente e é enviado quando a conexão voltar.
 - Instalável na tela inicial e funciona offline.
 
@@ -58,4 +59,4 @@ Depois abra `http://localhost:3000`.
 
 ## Mudar a lista padrão de cores
 Edite `CORES_PADRAO` no topo de `public/app.js`. (Com o servidor, a lista usada é a que está no banco; o link "Restaurar cores padrão" aplica a lista do código.)
-Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v5` → `v6`) para os celulares pegarem a atualização.
+Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v6` → `v7`) para os celulares pegarem a atualização.

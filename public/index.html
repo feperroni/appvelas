@@ -27,7 +27,15 @@
 
   <!-- ===== PEDIDO ===== -->
   <main class="tab-panel" id="tab-pedido">
+    <div class="editando" id="avisoEdicao" hidden>
+      <span>Editando pedido de <b id="edicaoData"></b></span>
+      <button type="button" class="btn sm ghost" id="btnCancelarEdicao">Cancelar</button>
+    </div>
+
     <section class="order-info">
+      <label>Nome do pedido
+        <input type="text" id="nomePedido" placeholder="Ex.: Festa de Ogum (opcional)" autocomplete="off" maxlength="200">
+      </label>
       <label>Cliente / Terreiro
         <input type="text" id="cliente" placeholder="Nome (opcional)" autocomplete="off">
       </label>
@@ -48,10 +56,27 @@
       <button type="submit" aria-label="Adicionar cor">+</button>
     </form>
     <button type="button" id="btnRestaurar" class="link-btn">Restaurar cores padrão</button>
+
+    <section class="caixa financeiro">
+      <h2>Financeiro <small>(opcional)</small></h2>
+      <div class="fin-grade">
+        <label>KG de palito
+          <input type="text" inputmode="decimal" id="finKg" placeholder="0,0" autocomplete="off">
+        </label>
+        <label>Valor palito (R$)
+          <input type="text" inputmode="decimal" id="finVp" placeholder="0,00" autocomplete="off">
+        </label>
+        <label>Valor 7 Dias (R$)
+          <input type="text" inputmode="decimal" id="finVd" placeholder="0,00" autocomplete="off">
+        </label>
+      </div>
+      <div class="fin-resumo" id="finResumo"></div>
+    </section>
   </main>
 
   <!-- ===== HISTÓRICO ===== -->
   <main class="tab-panel" id="tab-historico" hidden>
+    <input type="search" id="busca" class="busca" placeholder="Buscar por nome, cliente, data..." autocomplete="off">
     <p class="vazio" id="histVazio">Nenhum pedido guardado ainda.<br>Preencha um pedido e toque em <b>Guardar</b>.</p>
     <ul id="historico" class="historico"></ul>
 
@@ -78,8 +103,22 @@
       </select>
     </label>
 
+    <h2 class="secao">Resumo</h2>
     <div class="tiles" id="tiles"></div>
 
+    <h2 class="secao">Financeiro</h2>
+    <div class="tiles" id="tilesFin"></div>
+
+    <section class="caixa">
+      <h2>Gasto por mês</h2>
+      <div class="legenda">
+        <span><i class="chip s-palito"></i>Palito</span>
+        <span><i class="chip s-dias"></i>7 Dias</span>
+      </div>
+      <div id="chartGasto"></div>
+    </section>
+
+    <h2 class="secao">Quantidades</h2>
     <section class="caixa">
       <h2>Pedidos por mês</h2>
       <div id="chartPedidos"></div>

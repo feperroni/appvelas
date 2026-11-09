@@ -32,9 +32,11 @@ const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "o
 const $ = (id) => document.getElementById(id);
 
 // ================= Estado =================
-// state: { cores: [{nome, css}], qtd: {nome: {palito, dias}}, cliente, obs }
+// state: { cores: [{nome, css}], qtd: {nome: {palito, dias}}, nome, cliente, obs,
+//          fin: {kg, vp, vd} (texto digitado), editando: id do pedido em edição ou null }
 let state = carregar();
-// pedidos: [{id, data: ISO, cliente, obs, palito: [[cor, qtd]], dias: [[cor, qtd]]}]
+// pedidos: [{id, data: ISO, nome, cliente, obs, palito: [[cor, qtd]], dias: [[cor, qtd]],
+//            fin: {kgPalito, valorPalito, valorDias} | null, salvo}]
 let pedidos = carregarHistorico();
 
 function coresPadrao() {
@@ -54,8 +56,11 @@ function carregar() {
   return {
     cores,
     qtd: (salvo && salvo.qtd) || {},
+    nome: (salvo && salvo.nome) || "",
     cliente: (salvo && salvo.cliente) || "",
     obs: (salvo && salvo.obs) || "",
+    fin: (salvo && salvo.fin) || { kg: "", vp: "", vd: "" },
+    editando: (salvo && salvo.editando) || null,
   };
 }
 
@@ -63,7 +68,8 @@ function salvar() {
   const cores = state.cores.map(({ nome, css }) => ({ nome, css }));
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      cores, qtd: state.qtd, cliente: state.cliente, obs: state.obs,
+      cores, qtd: state.qtd, nome: state.nome, cliente: state.cliente, obs: state.obs,
+      fin: state.fin, editando: state.editando,
     }));
   } catch (e) {}
   enviarCoresSeMudou(cores);
@@ -197,6 +203,42 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ================= Utilidades =================
+// Lê número digitado no formato brasileiro ("1.234,5") ou com ponto ("12.5").
+function lerNumero(s) {
+  s = String(s ?? "").trim().replace(/\s|R\$/g, "");
+  if (!s) return null;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+const brl = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const kg = (n) => n.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) + " kg";
+const numBR = (n) => (n == null ? "" : n.toLocaleString("pt-BR", { maximumFractionDigits: 3 }));
+
+// Resumo financeiro de um pedido (valores ausentes ficam null).
+function resumoFin(p) {
+  const f = p.fin || {};
+  const kgP = f.kgPalito ?? null, vp = f.valorPalito ?? null, vd = f.valorDias ?? null;
+  const unDias = somaItens(p.dias);
+  const total = vp == null && vd == null ? null : (vp || 0) + (vd || 0);
+  return {
+    kg: kgP, vp, vd, total, unDias,
+    porKg: vp != null && kgP ? vp / kgP : null,
+    porUn: vd != null && unDias ? vd / unDias : null,
+  };
+}
+
+function htmlResumoFin(r) {
+  const partes = [];
+  if (r.kg != null || r.vp != null) {
+    partes.push(`<div><span>Palito</span><b>${[r.kg != null ? kg(r.kg) : "", r.vp != null ? brl(r.vp) : ""].filter(Boolean).join(" · ")}</b>${r.porKg != null ? `<small>${brl(r.porKg)}/kg</small>` : ""}</div>`);
+  }
+  if (r.vd != null) {
+    partes.push(`<div><span>7 Dias</span><b>${r.unDias} un · ${brl(r.vd)}</b>${r.porUn != null ? `<small>${brl(r.porUn)}/un</small>` : ""}</div>`);
+  }
+  if (r.total != null) partes.push(`<div class="fin-total"><span>Total</span><b>${brl(r.total)}</b></div>`);
+  return partes.join("");
+}
 const somaItens = (l) => l.reduce((a, [, n]) => a + n, 0);
 const cssDaCor = (nome) => (state.cores.find((c) => c.nome === nome) || {}).css || COR_EXTRA;
 const pad = (n) => String(n).padStart(2, "0");
@@ -333,16 +375,52 @@ function itens(tipo) {
 function atualizarTotais() {
   $("totals").textContent =
     `Palito: ${somaItens(itens("palito"))} · 7 Dias: ${somaItens(itens("dias"))}`;
+  $("finResumo").innerHTML = htmlResumoFin(resumoFin({ dias: itens("dias"), fin: finAtual() }));
+}
+
+function finAtual() {
+  const f = {
+    kgPalito: lerNumero(state.fin.kg),
+    valorPalito: lerNumero(state.fin.vp),
+    valorDias: lerNumero(state.fin.vd),
+  };
+  return Object.values(f).some((v) => v != null) ? f : null;
 }
 
 function pedidoAtual() {
+  const original = state.editando && pedidos.find((p) => p.id === state.editando);
   return {
-    data: new Date().toISOString(),
+    data: original ? original.data : new Date().toISOString(),
+    nome: state.nome.trim(),
     cliente: state.cliente.trim(),
     obs: state.obs.trim(),
     palito: itens("palito"),
     dias: itens("dias"),
+    fin: finAtual(),
   };
+}
+
+// Limpa o formulário para um pedido novo (o cliente fica, pois costuma ser o mesmo).
+function novoFormulario() {
+  state.qtd = {}; state.obs = ""; state.nome = "";
+  state.fin = { kg: "", vp: "", vd: "" };
+  state.editando = null;
+  preencherCampos();
+  salvar(); render();
+}
+
+function preencherCampos() {
+  $("nomePedido").value = state.nome;
+  $("cliente").value = state.cliente;
+  $("obs").value = state.obs;
+  $("finKg").value = state.fin.kg;
+  $("finVp").value = state.fin.vp;
+  $("finVd").value = state.fin.vd;
+  const ed = state.editando && pedidos.find((p) => p.id === state.editando);
+  if (state.editando && !ed && pedidos.length) state.editando = null; // pedido sumiu
+  $("avisoEdicao").hidden = !state.editando;
+  $("edicaoData").textContent = ed ? formatarData(ed.data, true) + (ed.nome ? ` (${ed.nome})` : "") : "";
+  $("btnGuardar").textContent = state.editando ? "Salvar" : "Guardar";
 }
 
 function temItens() {
@@ -354,14 +432,25 @@ function temItens() {
 function guardarPedido() {
   if (!temItens()) return;
   const p = pedidoAtual();
-  p.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  p.salvo = false; // ainda não foi para o servidor
-  pedidos.push(p);
-  if (!salvarHistorico()) { pedidos.pop(); return; }
-  // começa um pedido novo (o cliente fica, pois costuma ser o mesmo)
-  state.qtd = {}; state.obs = ""; $("obs").value = "";
-  salvar(); render();
-  toast("Pedido guardado no Histórico ✔");
+  const editando = state.editando;
+  const antes = pedidos;
+  if (editando) {
+    p.id = editando;
+    p.salvo = false;
+    pedidos = pedidos.map((x) => (x.id === editando ? p : x));
+  } else {
+    p.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    p.salvo = false; // ainda não foi para o servidor
+    pedidos = [...pedidos, p];
+  }
+  if (!salvarHistorico()) { pedidos = antes; return; }
+  novoFormulario();
+  if (editando) {
+    mostrarAba("historico");
+    toast("Alterações salvas ✔");
+  } else {
+    toast("Pedido guardado no Histórico ✔");
+  }
   sincronizar().then(() => {
     if (servidor && !p.salvo) toast("Sem internet: o pedido será enviado depois");
   });
@@ -379,6 +468,7 @@ async function exportarPdf(p) {
   doc.setFontSize(11);
   let y = 26;
   doc.text(`Data: ${formatarData(p.data)}`, 14, y);
+  if (p.nome) { y += 6; doc.text(`Pedido: ${p.nome}`, 14, y); }
   if (p.cliente) { y += 6; doc.text(`Cliente: ${p.cliente}`, 14, y); }
   if (p.obs) { y += 6; doc.text(doc.splitTextToSize(`Obs.: ${p.obs}`, larg - 28), 14, y); y += 6; }
 
@@ -396,13 +486,33 @@ async function exportarPdf(p) {
     columnStyles: { 1: { halign: "center", cellWidth: 18 } },
   });
   doc.autoTable(opts("Velas Palito", p.palito, 14));
+  const fimEsq = doc.lastAutoTable.finalY;
   doc.autoTable(opts("Velas 7 Dias", p.dias, 14 + meia + 6));
+
+  const r = resumoFin(p);
+  if (r.total != null || r.kg != null) {
+    const linhas = [];
+    if (r.kg != null) linhas.push(["KG de palito", kg(r.kg)]);
+    if (r.vp != null) linhas.push(["Valor palito", brl(r.vp) + (r.porKg != null ? `  (${brl(r.porKg)}/kg)` : "")]);
+    if (r.vd != null) linhas.push(["Valor 7 Dias", brl(r.vd) + (r.porUn != null ? `  (${brl(r.porUn)}/un)` : "")]);
+    if (r.total != null) linhas.push(["Valor total", brl(r.total)]);
+    doc.autoTable({
+      startY: Math.max(fimEsq, doc.lastAutoTable.finalY) + 8,
+      margin: { left: 14 },
+      tableWidth: meia,
+      head: [["Financeiro", ""]],
+      body: linhas,
+      theme: "grid",
+      headStyles: { fillColor: [91, 42, 134] },
+      columnStyles: { 1: { halign: "right" } },
+    });
+  }
 
   await entregar(doc.output("blob"), nomeArquivo("pdf", p.data));
 }
 
-function abaExcel(linhas) {
-  const ws = XLSX.utils.aoa_to_sheet([["Cor", "Quantidade"], ...linhas, [], ["Total", somaItens(linhas)]]);
+function abaExcel(linhas, extras = []) {
+  const ws = XLSX.utils.aoa_to_sheet([["Cor", "Quantidade"], ...linhas, [], ["Total", somaItens(linhas)], ...extras]);
   ws["!cols"] = [{ wch: 24 }, { wch: 12 }];
   return ws;
 }
@@ -415,8 +525,15 @@ function blobExcel(wb) {
 async function exportarExcel(p) {
   if (!window.XLSX) return toast("Biblioteca do Excel não carregou (sem internet?)");
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, abaExcel(p.palito), "Palito");
-  XLSX.utils.book_append_sheet(wb, abaExcel(p.dias), "7 Dias");
+  const r = resumoFin(p);
+  const extP = [], extD = [];
+  if (r.kg != null) extP.push(["KG", r.kg]);
+  if (r.vp != null) extP.push(["Valor (R$)", r.vp]);
+  if (r.porKg != null) extP.push(["R$ por kg", Math.round(r.porKg * 100) / 100]);
+  if (r.vd != null) extD.push(["Valor (R$)", r.vd]);
+  if (r.porUn != null) extD.push(["R$ por unidade", Math.round(r.porUn * 100) / 100]);
+  XLSX.utils.book_append_sheet(wb, abaExcel(p.palito, extP), "Palito");
+  XLSX.utils.book_append_sheet(wb, abaExcel(p.dias, extD), "7 Dias");
   await entregar(blobExcel(wb), nomeArquivo("xlsx", p.data));
 }
 
@@ -424,20 +541,24 @@ async function exportarExcelTodos() {
   if (!pedidos.length) return toast("Nenhum pedido guardado");
   if (!window.XLSX) return toast("Biblioteca do Excel não carregou (sem internet?)");
   const ordem = [...pedidos].sort((a, b) => a.data.localeCompare(b.data));
-  const resumo = [["Data", "Cliente", "Observações", "Palito", "7 Dias", "Total"]];
-  const detalhe = [["Data", "Cliente", "Tipo", "Cor", "Quantidade"]];
+  const resumo = [["Data", "Nome", "Cliente", "Observações", "Palito (un)", "7 Dias (un)",
+    "KG palito", "Valor palito (R$)", "R$/kg", "Valor 7 Dias (R$)", "R$/un 7 Dias", "Valor total (R$)"]];
+  const detalhe = [["Data", "Nome", "Cliente", "Tipo", "Cor", "Quantidade"]];
+  const v = (n) => (n == null ? "" : Math.round(n * 100) / 100);
   ordem.forEach((p) => {
     const d = formatarData(p.data, true);
-    const tp = somaItens(p.palito), td = somaItens(p.dias);
-    resumo.push([d, p.cliente || "", p.obs || "", tp, td, tp + td]);
-    p.palito.forEach(([c, n]) => detalhe.push([d, p.cliente || "", "Palito", c, n]));
-    p.dias.forEach(([c, n]) => detalhe.push([d, p.cliente || "", "7 Dias", c, n]));
+    const r = resumoFin(p);
+    resumo.push([d, p.nome || "", p.cliente || "", p.obs || "", somaItens(p.palito), somaItens(p.dias),
+      r.kg ?? "", v(r.vp), v(r.porKg), v(r.vd), v(r.porUn), v(r.total)]);
+    p.palito.forEach(([c, n]) => detalhe.push([d, p.nome || "", p.cliente || "", "Palito", c, n]));
+    p.dias.forEach(([c, n]) => detalhe.push([d, p.nome || "", p.cliente || "", "7 Dias", c, n]));
   });
   const wb = XLSX.utils.book_new();
   const ws1 = XLSX.utils.aoa_to_sheet(resumo);
-  ws1["!cols"] = [{ wch: 17 }, { wch: 20 }, { wch: 28 }, { wch: 8 }, { wch: 8 }, { wch: 8 }];
+  ws1["!cols"] = [{ wch: 17 }, { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 10 }, { wch: 10 },
+    { wch: 9 }, { wch: 16 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 15 }];
   const ws2 = XLSX.utils.aoa_to_sheet(detalhe);
-  ws2["!cols"] = [{ wch: 17 }, { wch: 20 }, { wch: 8 }, { wch: 22 }, { wch: 11 }];
+  ws2["!cols"] = [{ wch: 17 }, { wch: 20 }, { wch: 20 }, { wch: 8 }, { wch: 22 }, { wch: 11 }];
   XLSX.utils.book_append_sheet(wb, ws1, "Pedidos");
   XLSX.utils.book_append_sheet(wb, ws2, "Itens");
   await entregar(blobExcel(wb), "historico-pedidos-velas.xlsx");
@@ -478,9 +599,19 @@ $("dlgTexto").addEventListener("click", (e) => { if (e.target.id === "dlgTexto")
 function renderHistorico() {
   const ul = $("historico");
   ul.innerHTML = "";
-  $("histVazio").hidden = pedidos.length > 0;
-  [...pedidos].sort((a, b) => b.data.localeCompare(a.data)).forEach((p) => {
+  const termo = normalizar($("busca").value.trim());
+  const lista = [...pedidos]
+    .sort((a, b) => b.data.localeCompare(a.data))
+    .filter((p) => !termo || normalizar(
+      [p.nome, p.cliente, p.obs, formatarData(p.data, true), ...p.palito.map((i) => i[0]), ...p.dias.map((i) => i[0])].join(" ")
+    ).includes(termo));
+  $("histVazio").hidden = lista.length > 0;
+  $("histVazio").innerHTML = pedidos.length
+    ? "Nenhum pedido encontrado."
+    : "Nenhum pedido guardado ainda.<br>Preencha um pedido e toque em <b>Guardar</b>.";
+  lista.forEach((p) => {
     const tp = somaItens(p.palito), td = somaItens(p.dias);
+    const rf = resumoFin(p);
     const linhas = (l) => l.length
       ? l.map(([c, n]) => `<li><span class="swatch sm" style="background:${cssDaCor(c)}"></span><span>${esc(c)}</span><b>${n}</b></li>`).join("")
       : `<li class="nada">—</li>`;
@@ -488,21 +619,27 @@ function renderHistorico() {
     li.innerHTML = `
       <details class="pedido">
         <summary>
-          <div>
-            <div class="p-data">${formatarData(p.data, true)}</div>
-            ${p.cliente ? `<div class="p-cliente">${esc(p.cliente)}</div>` : ""}
+          <div class="p-info">
+            ${p.nome ? `<div class="p-nome">${esc(p.nome)}</div>` : ""}
+            <div class="${p.nome ? "p-sub" : "p-data"}">${formatarData(p.data, true)}</div>
+            ${p.cliente ? `<div class="p-sub">${esc(p.cliente)}</div>` : ""}
           </div>
-          <div class="p-tot">Palito <b>${tp}</b> · 7 Dias <b>${td}</b></div>
+          <div class="p-tot">
+            Palito <b>${tp}</b> · 7 Dias <b>${td}</b>
+            ${rf.total != null ? `<div class="p-valor">${brl(rf.total)}</div>` : ""}
+          </div>
         </summary>
         ${p.obs ? `<p class="p-obs">Obs.: ${esc(p.obs)}</p>` : ""}
         <div class="p-colunas">
           <div><h3>Palito</h3><ul>${linhas(p.palito)}</ul></div>
           <div><h3>7 Dias</h3><ul>${linhas(p.dias)}</ul></div>
         </div>
+        ${rf.total != null || rf.kg != null ? `<div class="fin-resumo p-fin">${htmlResumoFin(rf)}</div>` : ""}
         <div class="p-acoes">
           <button type="button" class="btn sm" data-a="texto">Texto</button>
           <button type="button" class="btn sm" data-a="pdf">PDF</button>
           <button type="button" class="btn sm" data-a="excel">Excel</button>
+          <button type="button" class="btn sm" data-a="editar">Editar</button>
           <button type="button" class="btn sm" data-a="repetir">Repetir</button>
           <button type="button" class="btn sm perigo" data-a="excluir">Excluir</button>
         </div>
@@ -511,6 +648,7 @@ function renderHistorico() {
     li.querySelector('[data-a="pdf"]').onclick = () => exportarPdf(p);
     li.querySelector('[data-a="excel"]').onclick = () => exportarExcel(p);
     li.querySelector('[data-a="repetir"]').onclick = () => repetirPedido(p);
+    li.querySelector('[data-a="editar"]').onclick = () => editarPedido(p);
     li.querySelector('[data-a="excluir"]').onclick = async () => {
       if (!confirm(`Excluir o pedido de ${formatarData(p.data, true)}? Isso não pode ser desfeito.`)) return;
       if (servidor && p.salvo) {
@@ -518,6 +656,7 @@ function renderHistorico() {
         catch (e) { return toast("Sem conexão com o servidor. Tente de novo."); }
       }
       pedidos = pedidos.filter((x) => x.id !== p.id);
+      if (state.editando === p.id) novoFormulario();
       salvarHistorico(); renderHistorico();
       toast("Pedido excluído");
     };
@@ -525,9 +664,13 @@ function renderHistorico() {
   });
 }
 
-function repetirPedido(p) {
-  if ((itens("palito").length || itens("dias").length) &&
-      !confirm("Substituir as quantidades do pedido atual por este?")) return;
+const normalizar = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function formularioTemDados() {
+  return itens("palito").length || itens("dias").length || state.editando;
+}
+
+function copiarQuantidades(p) {
   state.qtd = {};
   const add = (tipo) => p[tipo].forEach(([c, n]) => {
     if (!state.cores.some((x) => x.nome === c)) state.cores.push({ nome: c, css: COR_EXTRA });
@@ -535,9 +678,33 @@ function repetirPedido(p) {
     state.qtd[c][tipo] = n;
   });
   add("palito"); add("dias");
+}
+
+function repetirPedido(p) {
+  if (formularioTemDados() &&
+      !confirm("Substituir o pedido que está sendo preenchido por uma cópia deste?")) return;
+  novoFormulario();
+  copiarQuantidades(p);
+  state.nome = p.nome || "";
+  preencherCampos();
   salvar(); render();
   mostrarAba("pedido");
-  toast("Quantidades copiadas para o pedido");
+  toast("Quantidades copiadas para um pedido novo");
+}
+
+function editarPedido(p) {
+  if (state.editando !== p.id && formularioTemDados() &&
+      !confirm("Substituir o pedido que está sendo preenchido pela edição deste?")) return;
+  copiarQuantidades(p);
+  const f = p.fin || {};
+  state.nome = p.nome || "";
+  state.cliente = p.cliente || "";
+  state.obs = p.obs || "";
+  state.fin = { kg: numBR(f.kgPalito), vp: numBR(f.valorPalito), vd: numBR(f.valorDias) };
+  state.editando = p.id;
+  preencherCampos();
+  salvar(); render();
+  mostrarAba("pedido");
 }
 
 function fazerBackup() {
@@ -607,11 +774,44 @@ function renderEstatisticas() {
     ["Média de velas por pedido", media],
   ].map(([r, v]) => `<div class="tile"><div class="tile-v">${v.toLocaleString("pt-BR")}</div><div class="tile-r">${r}</div></div>`).join("");
 
-  const porMes = Object.fromEntries(meses.map((m) => [m.chave, { pedidos: 0, palito: 0, dias: 0 }]));
+  // ---- financeiro ----
+  let gastoP = 0, gastoD = 0, kgTot = 0, comValor = 0;
+  let vpComKg = 0, kgComValor = 0, vdComUn = 0, unComValor = 0;
+  doPeriodo.forEach((p) => {
+    const r = resumoFin(p);
+    if (r.total != null) comValor++;
+    gastoP += r.vp || 0; gastoD += r.vd || 0; kgTot += r.kg || 0;
+    if (r.porKg != null) { vpComKg += r.vp; kgComValor += r.kg; }
+    if (r.porUn != null) { vdComUn += r.vd; unComValor += r.unDias; }
+  });
+  const tile = (v, r) => `<div class="tile"><div class="tile-v money">${v}</div><div class="tile-r">${r}</div></div>`;
+  $("tilesFin").innerHTML = comValor || kgTot
+    ? [
+        tile(brl(gastoP + gastoD), "Gasto total"),
+        tile(comValor ? brl((gastoP + gastoD) / comValor) : "—", "Média por pedido"),
+        tile(brl(gastoP), "Gasto com palito"),
+        tile(brl(gastoD), "Gasto com 7 Dias"),
+        tile(kg(kgTot), "KG de palito"),
+        tile(kgComValor ? brl(vpComKg / kgComValor) : "—", "Preço médio do kg"),
+        tile(unComValor ? brl(vdComUn / unComValor) : "—", "Preço médio da vela 7 Dias"),
+        tile(String(comValor), "Pedidos com valor informado"),
+      ].join("")
+    : `<p class="ajuda tiles-vazio">Nenhum valor informado neste período. Preencha a parte <b>Financeiro</b> nos pedidos (dá para editar os já guardados).</p>`;
+
+  const porMes = Object.fromEntries(meses.map((m) => [m.chave, { pedidos: 0, palito: 0, dias: 0, gp: 0, gd: 0 }]));
   doPeriodo.forEach((p) => {
     const m = porMes[chaveMes(p.data)];
+    const r = resumoFin(p);
     m.pedidos++; m.palito += somaItens(p.palito); m.dias += somaItens(p.dias);
+    m.gp += r.vp || 0; m.gd += r.vd || 0;
   });
+
+  const moedaCurta = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  graficoBarras($("chartGasto"), meses, [
+    { cls: "s-palito", valores: meses.map((m) => porMes[m.chave].gp) },
+    { cls: "s-dias", valores: meses.map((m) => porMes[m.chave].gd) },
+  ], (m) => { const v = porMes[m.chave]; return `${nomeMes(m)}: Palito ${brl(v.gp)} · 7 Dias ${brl(v.gd)} · total ${brl(v.gp + v.gd)}`; },
+  moedaCurta);
 
   graficoBarras($("chartPedidos"), meses, [{ cls: "s-pedidos", valores: meses.map((m) => porMes[m.chave].pedidos) }],
     (m, i) => { const n = porMes[m.chave].pedidos; return `${nomeMes(m)}: ${n} pedido${n === 1 ? "" : "s"}`; });
@@ -627,13 +827,13 @@ function renderEstatisticas() {
 const nomeMes = (m) => `${MESES[m.mes]}/${m.ano}`;
 
 // Barras verticais empilhadas. Toque numa barra para ver os números.
-function graficoBarras(el, meses, series, texto) {
+function graficoBarras(el, meses, series, texto, fmtEixo = (n) => n.toLocaleString("pt-BR")) {
   const totais = meses.map((_, i) => series.reduce((a, s) => a + s.valores[i], 0));
   const max = Math.max(1, ...totais);
   const vazio = totais.every((t) => t === 0);
   el.innerHTML = `
     <div class="chart">
-      <div class="chart-eixo"><span>${vazio ? "" : max}</span><span>0</span></div>
+      <div class="chart-eixo"><span>${vazio ? "" : fmtEixo(max)}</span><span>0</span></div>
       <div class="chart-area">
         <div class="bars">
           ${meses.map((m, i) => `
@@ -695,12 +895,21 @@ $("rankTipo").querySelectorAll("button").forEach((b) => b.addEventListener("clic
 }));
 
 // ================= Eventos da aba Pedido =================
-const cliente = $("cliente");
-const obs = $("obs");
-cliente.value = state.cliente;
-obs.value = state.obs;
-cliente.addEventListener("input", () => { state.cliente = cliente.value; salvar(); });
-obs.addEventListener("input", () => { state.obs = obs.value; salvar(); });
+const ligarCampo = (id, ler) => $(id).addEventListener("input", (e) => { ler(e.target.value); salvar(); atualizarTotais(); });
+ligarCampo("nomePedido", (v) => (state.nome = v));
+ligarCampo("cliente", (v) => (state.cliente = v));
+ligarCampo("obs", (v) => (state.obs = v));
+ligarCampo("finKg", (v) => (state.fin.kg = v));
+ligarCampo("finVp", (v) => (state.fin.vp = v));
+ligarCampo("finVd", (v) => (state.fin.vd = v));
+
+$("btnCancelarEdicao").addEventListener("click", () => {
+  if (!confirm("Cancelar a edição? As alterações não salvas serão descartadas.")) return;
+  novoFormulario();
+  toast("Edição cancelada");
+});
+
+$("busca").addEventListener("input", renderHistorico);
 
 $("addForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -730,16 +939,18 @@ $("btnTexto").addEventListener("click", () => temItens() && abrirTexto(pedidoAtu
 $("btnPdf").addEventListener("click", () => temItens() && exportarPdf(pedidoAtual()));
 $("btnExcel").addEventListener("click", () => temItens() && exportarExcel(pedidoAtual()));
 $("btnLimpar").addEventListener("click", () => {
-  if (!confirm("Zerar todas as quantidades?")) return;
-  state.qtd = {}; state.obs = ""; obs.value = "";
-  salvar(); render();
-  toast("Quantidades zeradas");
+  if (!confirm("Zerar quantidades, nome, observações e financeiro?")) return;
+  state.qtd = {}; state.obs = ""; state.nome = "";
+  state.fin = { kg: "", vp: "", vd: "" };
+  preencherCampos(); salvar(); render();
+  toast("Pedido zerado");
 });
 
 $("btnExcelTodos").addEventListener("click", exportarExcelTodos);
 $("btnBackup").addEventListener("click", fazerBackup);
 $("btnRestaurarBackup").addEventListener("click", () => $("arquivoBackup").click());
 
+preencherCampos();
 render();
 iniciarServidor();
 

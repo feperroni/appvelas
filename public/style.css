@@ -251,6 +251,41 @@ select {
 .r-barra span { display: block; height: 100%; min-width: 2px; }
 .r-num { min-width: 28px; text-align: right; }
 
+/* ===== Edição, nome, busca ===== */
+.editando {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: color-mix(in srgb, var(--primary) 14%, var(--card));
+  border: 1px solid var(--primary); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 12px; font-size: .9rem;
+}
+.editando .btn { flex: 0 0 auto; padding: 6px 12px; }
+.busca {
+  width: 100%; padding: 10px 12px; font-size: 1rem; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--card); color: var(--text);
+}
+.p-nome { font-weight: 700; }
+.p-sub { font-size: .85rem; color: var(--muted); }
+.p-valor { color: var(--text); font-weight: 700; margin-top: 2px; }
+.p-info { min-width: 0; overflow-wrap: anywhere; }
+.p-acoes { grid-template-columns: repeat(3, 1fr) !important; }
+
+/* ===== Financeiro ===== */
+.caixa h2 small { font-weight: 400; color: var(--muted); font-size: .8rem; }
+.fin-grade { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.fin-grade label { display: grid; gap: 4px; font-size: .78rem; color: var(--muted); align-content: end; }
+.fin-grade input { padding: 10px 8px; }
+.fin-resumo { display: grid; gap: 6px; margin-top: 10px; font-size: .88rem; }
+.fin-resumo:empty { display: none; }
+.fin-resumo > div { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: baseline; }
+.fin-resumo span { color: var(--muted); }
+.fin-resumo small { color: var(--muted); }
+.fin-total { border-top: 1px solid var(--border); padding-top: 6px; font-size: .98rem; }
+.p-fin { margin: 0 14px 12px; padding: 10px 12px; background: var(--bg); border-radius: 10px; }
+.secao { margin: 18px 0 0; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tile-v.money { font-size: 1.2rem; }
+.tiles-vazio { grid-column: 1 / -1; margin: 0; }
+
 .toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
