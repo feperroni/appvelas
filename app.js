@@ -328,6 +328,37 @@ async function exportarExcelTodos() {
   await entregar(blobExcel(wb), "historico-pedidos-velas.xlsx");
 }
 
+// ================= Texto para WhatsApp =================
+function textoPedido(p) {
+  const bloco = (titulo, linhas) => linhas.length
+    ? `${titulo}:\n${linhas.map(([c, n]) => `${c} - ${n}`).join("\n")}`
+    : "";
+  return [bloco("Velas Palito", p.palito), bloco("Velas 7 Dias", p.dias)].filter(Boolean).join("\n\n");
+}
+
+function abrirTexto(p) {
+  $("txtPedido").value = textoPedido(p);
+  $("btnCompartilharTexto").hidden = !navigator.share;
+  $("dlgTexto").showModal();
+}
+
+async function copiarTexto() {
+  const txt = $("txtPedido");
+  try {
+    await navigator.clipboard.writeText(txt.value);
+  } catch (e) {
+    txt.select(); document.execCommand("copy"); // navegadores antigos
+  }
+  toast("Texto copiado! Agora é só colar no WhatsApp");
+}
+
+$("btnCopiarTexto").addEventListener("click", copiarTexto);
+$("btnFecharTexto").addEventListener("click", () => $("dlgTexto").close());
+$("btnCompartilharTexto").addEventListener("click", async () => {
+  try { await navigator.share({ text: $("txtPedido").value }); } catch (e) {}
+});
+$("dlgTexto").addEventListener("click", (e) => { if (e.target.id === "dlgTexto") e.target.close(); });
+
 // ================= Aba Histórico =================
 function renderHistorico() {
   const ul = $("historico");
@@ -354,12 +385,14 @@ function renderHistorico() {
           <div><h3>7 Dias</h3><ul>${linhas(p.dias)}</ul></div>
         </div>
         <div class="p-acoes">
+          <button type="button" class="btn sm" data-a="texto">Texto</button>
           <button type="button" class="btn sm" data-a="pdf">PDF</button>
           <button type="button" class="btn sm" data-a="excel">Excel</button>
           <button type="button" class="btn sm" data-a="repetir">Repetir</button>
           <button type="button" class="btn sm perigo" data-a="excluir">Excluir</button>
         </div>
       </details>`;
+    li.querySelector('[data-a="texto"]').onclick = () => abrirTexto(p);
     li.querySelector('[data-a="pdf"]').onclick = () => exportarPdf(p);
     li.querySelector('[data-a="excel"]').onclick = () => exportarExcel(p);
     li.querySelector('[data-a="repetir"]').onclick = () => repetirPedido(p);
@@ -573,6 +606,7 @@ $("btnRestaurar").addEventListener("click", () => {
 });
 
 $("btnGuardar").addEventListener("click", guardarPedido);
+$("btnTexto").addEventListener("click", () => temItens() && abrirTexto(pedidoAtual()));
 $("btnPdf").addEventListener("click", () => temItens() && exportarPdf(pedidoAtual()));
 $("btnExcel").addEventListener("click", () => temItens() && exportarExcel(pedidoAtual()));
 $("btnLimpar").addEventListener("click", () => {

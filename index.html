@@ -112,9 +112,20 @@
   <footer class="actions" id="acoesPedido">
     <button id="btnLimpar" class="btn ghost">Limpar</button>
     <button id="btnGuardar" class="btn">Guardar</button>
+    <button id="btnTexto" class="btn primary">Texto</button>
     <button id="btnPdf" class="btn primary">PDF</button>
     <button id="btnExcel" class="btn primary">Excel</button>
   </footer>
+
+  <dialog id="dlgTexto" class="dlg">
+    <h2>Mensagem para WhatsApp</h2>
+    <textarea id="txtPedido" readonly rows="12"></textarea>
+    <div class="dlg-acoes">
+      <button type="button" class="btn ghost" id="btnFecharTexto">Fechar</button>
+      <button type="button" class="btn" id="btnCompartilharTexto">Enviar…</button>
+      <button type="button" class="btn primary" id="btnCopiarTexto">Copiar</button>
+    </div>
+  </dialog>
 
   <div id="toast" class="toast" hidden></div>
 

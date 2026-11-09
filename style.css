@@ -109,12 +109,12 @@ input[type="text"] {
 
 .actions {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   background: var(--card); border-top: 1px solid var(--border);
 }
 .btn {
-  padding: 12px 4px; font-size: .95rem; font-weight: 600;
+  padding: 12px 2px; font-size: .88rem; font-weight: 600;
   border-radius: 10px; border: 1px solid var(--primary);
   background: var(--card); color: var(--primary); cursor: pointer;
 }
@@ -162,7 +162,21 @@ body:not([data-tab="pedido"]) .totals { visibility: hidden; }
 .p-colunas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .88rem; }
 .p-colunas li { display: flex; align-items: center; gap: 6px; }
 .p-colunas li b { margin-left: auto; }
-.p-acoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0 14px 14px; }
+.dlg {
+  width: min(520px, calc(100% - 32px)); border: 0; border-radius: 16px;
+  padding: 16px; background: var(--card); color: var(--text);
+}
+.dlg::backdrop { background: rgba(0,0,0,.45); }
+.dlg h2 { margin: 0 0 10px; font-size: 1.05rem; }
+.dlg textarea {
+  width: 100%; resize: vertical; padding: 10px 12px; font: inherit; font-size: .95rem;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
+}
+.dlg-acoes { display: flex; gap: 8px; margin-top: 12px; }
+.dlg-acoes .btn { flex: 1; }
+.dlg-acoes .btn[hidden] { display: none; }
+
+.p-acoes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 0 14px 14px; }
 .btn.sm { padding: 8px 2px; font-size: .82rem; }
 .btn.perigo { border-color: #c0392b; color: #c0392b; }
 
