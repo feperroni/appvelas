@@ -25,19 +25,28 @@ const CORES_PADRAO = [
 ];
 
 const STORAGE_KEY = "pedidoVelas.v1";
+const COR_EXTRA = "#cccccc";
 
-// state: { cores: [{nome, css, custom}], qtd: {nome: {palito, dias}}, cliente, obs }
+// state: { cores: [{nome, css}], qtd: {nome: {palito, dias}}, cliente, obs }
 let state = carregar();
+
+function coresPadrao() {
+  return CORES_PADRAO.map(([nome, css]) => ({ nome, css }));
+}
 
 function carregar() {
   let salvo = null;
   try { salvo = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) {}
-  const extras = (salvo && salvo.extras) || [];
+  let cores;
+  if (salvo && Array.isArray(salvo.cores)) {
+    cores = salvo.cores;
+  } else {
+    // versão antiga só guardava as cores extras
+    const extras = (salvo && salvo.extras) || [];
+    cores = [...coresPadrao(), ...extras.map((nome) => ({ nome, css: COR_EXTRA }))];
+  }
   return {
-    cores: [
-      ...CORES_PADRAO.map(([nome, css]) => ({ nome, css, custom: false })),
-      ...extras.map((nome) => ({ nome, css: "#cccccc", custom: true })),
-    ],
+    cores,
     qtd: (salvo && salvo.qtd) || {},
     cliente: (salvo && salvo.cliente) || "",
     obs: (salvo && salvo.obs) || "",
@@ -46,7 +55,7 @@ function carregar() {
 
 function salvar(silencioso) {
   const dados = {
-    extras: state.cores.filter((c) => c.custom).map((c) => c.nome),
+    cores: state.cores.map(({ nome, css }) => ({ nome, css })),
     qtd: state.qtd,
     cliente: state.cliente,
     obs: state.obs,
@@ -72,7 +81,10 @@ function render() {
       <div class="cor">
         <span class="swatch" style="background:${cor.css}"></span>
         <span class="nome"></span>
-        ${cor.custom ? '<button class="remover" title="Remover cor" aria-label="Remover cor">✕</button>' : ""}
+        <span class="mini-acoes">
+          <button type="button" class="mini editar" title="Editar nome" aria-label="Editar nome">✎</button>
+          <button type="button" class="mini remover" title="Remover cor" aria-label="Remover cor">✕</button>
+        </span>
       </div>
       <input type="number" inputmode="numeric" min="0" step="1" data-tipo="palito" aria-label="Palito ${cor.nome}" placeholder="0">
       <input type="number" inputmode="numeric" min="0" step="1" data-tipo="dias" aria-label="7 Dias ${cor.nome}" placeholder="0">
@@ -91,12 +103,26 @@ function render() {
       });
       inp.addEventListener("focus", () => inp.select());
     });
-    const rm = li.querySelector(".remover");
-    if (rm) rm.addEventListener("click", () => {
+    li.querySelector(".remover").addEventListener("click", () => {
       if (!confirm(`Remover a cor "${cor.nome}"?`)) return;
       state.cores = state.cores.filter((c) => c !== cor);
       delete state.qtd[cor.nome];
       salvar(true); render();
+      toast(`Cor "${cor.nome}" removida`);
+    });
+    li.querySelector(".editar").addEventListener("click", () => {
+      const novo = (prompt("Novo nome da cor:", cor.nome) || "").trim();
+      if (!novo || novo === cor.nome) return;
+      if (state.cores.some((c) => c !== cor && c.nome.toLowerCase() === novo.toLowerCase())) {
+        return toast("Já existe uma cor com esse nome");
+      }
+      if (state.qtd[cor.nome]) {
+        state.qtd[novo] = state.qtd[cor.nome];
+        delete state.qtd[cor.nome];
+      }
+      cor.nome = novo;
+      salvar(true); render();
+      toast("Nome alterado");
     });
     marcar(li, cor.nome);
     lista.appendChild(li);
@@ -237,10 +263,19 @@ document.getElementById("addForm").addEventListener("submit", (e) => {
   if (state.cores.some((c) => c.nome.toLowerCase() === nome.toLowerCase())) {
     return toast("Essa cor já existe");
   }
-  state.cores.push({ nome, css: "#cccccc", custom: true });
+  state.cores.push({ nome, css: COR_EXTRA });
   inp.value = "";
   salvar(true); render();
   toast(`Cor "${nome}" adicionada`);
+});
+
+document.getElementById("btnRestaurar").addEventListener("click", () => {
+  if (!confirm("Voltar para a lista de cores original? Cores adicionadas ou renomeadas serão desfeitas.")) return;
+  state.cores = coresPadrao();
+  const nomes = new Set(state.cores.map((c) => c.nome));
+  Object.keys(state.qtd).forEach((n) => { if (!nomes.has(n)) delete state.qtd[n]; });
+  salvar(true); render();
+  toast("Lista de cores restaurada");
 });
 
 document.getElementById("btnSalvar").addEventListener("click", () => salvar(false));

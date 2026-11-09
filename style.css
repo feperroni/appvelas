@@ -48,7 +48,7 @@ input[type="text"] {
 
 .table-head, .item {
   display: grid;
-  grid-template-columns: 1fr 76px 76px;
+  grid-template-columns: 1fr 64px 64px;
   gap: 8px; align-items: center;
 }
 .table-head {
@@ -65,15 +65,24 @@ input[type="text"] {
   border-radius: 12px; padding: 8px 10px;
 }
 .item.filled { border-color: var(--primary); }
-.cor { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cor { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .swatch {
-  flex: 0 0 26px; height: 26px; border-radius: 50%;
+  flex: 0 0 22px; height: 22px; border-radius: 50%;
   border: 1px solid rgba(0,0,0,.25);
 }
-.nome { font-size: .95rem; overflow-wrap: anywhere; }
-.remover {
-  margin-left: auto; border: 0; background: none; color: var(--muted);
-  font-size: 1.1rem; padding: 4px; cursor: pointer;
+.nome { flex: 1; min-width: 0; font-size: .95rem; overflow-wrap: anywhere; }
+.mini-acoes { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.mini {
+  width: 26px; height: 22px; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--muted);
+  font-size: .8rem; line-height: 1; cursor: pointer;
+}
+.mini.remover:active { color: #c0392b; border-color: #c0392b; }
+.mini.editar:active { color: var(--primary); border-color: var(--primary); }
+.link-btn {
+  display: block; margin: 14px auto 0; border: 0; background: none;
+  color: var(--muted); font-size: .85rem; text-decoration: underline; cursor: pointer;
 }
 .item input[type="number"] {
   width: 100%; padding: 10px 4px; font-size: 1.05rem; text-align: center;

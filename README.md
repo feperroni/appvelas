@@ -5,7 +5,7 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 ## Funções
 - Lista de cores com quantidade para Palito e 7 Dias (salva automaticamente no celular).
 - Campo opcional de cliente/terreiro e observações.
-- Adicionar cores extras (e remover as adicionadas).
+- Adicionar cores, editar o nome (✎) ou remover (✕) qualquer cor. O link "Restaurar cores padrão" volta à lista original.
 - **PDF**: as duas tabelas lado a lado, só com as cores preenchidas, com totais.
 - **Excel**: aba `Palito` e aba `7 Dias`, com totais.
 - No celular, o botão de exportar abre o menu de compartilhar (WhatsApp, e-mail, Drive...).
