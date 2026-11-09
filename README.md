@@ -10,11 +10,11 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 - **Texto**: abre uma caixa com o pedido pronto para copiar e colar no WhatsApp.
 - **PDF**: as duas tabelas lado a lado, só com as cores preenchidas, com totais.
 - **Excel**: aba `Palito` e aba `7 Dias`, com totais.
-- **Guardar**: salva o pedido no **Histórico** e começa um novo.
+- **Salvar**: salva o pedido no **Histórico** e começa um novo.
 - **Histórico**: busca por nome, cliente, data ou cor; ver cada pedido, **editar**, exportar de novo (Texto/PDF/Excel), repetir ou excluir. Excel com todos os pedidos (incluindo o financeiro), backup e restauração.
 - **Estatísticas**: total de pedidos e velas, gasto total, gasto com palito e com 7 Dias, KG comprados, preço médio do kg e da vela 7 Dias, gasto por mês, pedidos por mês, velas por mês e cores mais pedidas, com filtro de período.
 - **Login com usuário e senha**: todos usam o mesmo link, e **cada usuário vê apenas os próprios pedidos**, estatísticas e lista de cores, de qualquer celular em que entrar.
-- Pedidos ficam no banco (Railway + Postgres). Sem internet, o pedido guardado fica pendente e é enviado quando a conexão voltar.
+- Pedidos ficam no banco (Railway + Postgres). Sem internet, o pedido salvo fica pendente e é enviado quando a conexão voltar.
 - Instalável na tela inicial e funciona offline.
 
 ## Usuários
@@ -71,4 +71,4 @@ Depois abra `http://localhost:3000`.
 
 ## Mudar a lista padrão de cores
 Edite `CORES_PADRAO` no topo de `public/app.js`. (Com o servidor, a lista usada é a que está no banco; o link "Restaurar cores padrão" aplica a lista do código.)
-Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v9` → `v10`) para os celulares pegarem a atualização.
+Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v10` → `v11`) para os celulares pegarem a atualização.

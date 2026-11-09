@@ -333,11 +333,11 @@ function atualizarStatus() {
   if (!el) return;
   const pend = pedidos.filter((p) => !p.salvo).length;
   if (!servidor) {
-    el.textContent = "Os pedidos ficam guardados só neste celular. Faça um backup de vez em quando para não perder nada.";
+    el.textContent = "Os pedidos ficam salvos só neste celular. Faça um backup de vez em quando para não perder nada.";
   } else if (pend) {
-    el.textContent = `${pend} pedido(s) aguardando internet para ir ao servidor. Eles já estão guardados neste celular.`;
+    el.textContent = `${pend} pedido(s) aguardando internet para ir ao servidor. Eles já estão salvos neste celular.`;
   } else {
-    el.textContent = "Pedidos guardados no servidor. Só você vê os seus pedidos, de qualquer celular em que entrar.";
+    el.textContent = "Pedidos salvos no servidor. Só você vê os seus pedidos, de qualquer celular em que entrar.";
   }
 }
 
@@ -575,7 +575,7 @@ function preencherCampos() {
   if (state.editando && !ed && pedidos.length) state.editando = null; // pedido sumiu
   $("avisoEdicao").hidden = !state.editando;
   $("edicaoData").textContent = ed ? formatarData(ed.data, true) + (ed.nome ? ` (${ed.nome})` : "") : "";
-  $("btnGuardar").textContent = state.editando ? "Salvar" : "Guardar";
+  $("btnGuardar").textContent = "Salvar";
 }
 
 function temItens() {
@@ -604,7 +604,7 @@ function guardarPedido() {
     mostrarAba("historico");
     toast("Alterações salvas ✔");
   } else {
-    toast("Pedido guardado no Histórico ✔");
+    toast("Pedido salvo no Histórico ✔");
   }
   sincronizar().then(() => {
     if (servidor && !p.salvo) toast("Sem internet: o pedido será enviado depois");
@@ -693,7 +693,7 @@ async function exportarExcel(p) {
 }
 
 async function exportarExcelTodos() {
-  if (!pedidos.length) return toast("Nenhum pedido guardado");
+  if (!pedidos.length) return toast("Nenhum pedido salvo");
   if (!window.XLSX) return toast("Biblioteca do Excel não carregou (sem internet?)");
   const ordem = [...pedidos].sort((a, b) => a.data.localeCompare(b.data));
   const resumo = [["Data", "Nome", "Cliente", "Observações", "Palito (un)", "7 Dias (un)",
@@ -763,7 +763,7 @@ function renderHistorico() {
   $("histVazio").hidden = lista.length > 0;
   $("histVazio").innerHTML = pedidos.length
     ? "Nenhum pedido encontrado."
-    : "Nenhum pedido guardado ainda.<br>Preencha um pedido e toque em <b>Guardar</b>.";
+    : "Nenhum pedido salvo ainda.<br>Preencha um pedido e toque em <b>Salvar</b>.";
   lista.forEach((p) => {
     const tp = somaItens(p.palito), td = somaItens(p.dias);
     const rf = resumoFin(p);
@@ -863,7 +863,7 @@ function editarPedido(p) {
 }
 
 function fazerBackup() {
-  if (!pedidos.length) return toast("Nenhum pedido guardado");
+  if (!pedidos.length) return toast("Nenhum pedido salvo");
   const dados = { app: "pedido-velas", versao: 1, criadoEm: new Date().toISOString(), pedidos: pedidos.map(semMarcas) };
   const blob = new Blob([JSON.stringify(dados, null, 1)], { type: "application/json" });
   entregar(blob, `backup-pedidos-velas-${nomeArquivo("json").slice(13)}`);
@@ -951,7 +951,7 @@ function renderEstatisticas() {
         tile(unComValor ? brl(vdComUn / unComValor) : "—", "Preço médio da vela 7 Dias"),
         tile(String(comValor), "Pedidos com valor informado"),
       ].join("")
-    : `<p class="ajuda tiles-vazio">Nenhum valor informado neste período. Preencha a parte <b>Financeiro</b> nos pedidos (dá para editar os já guardados).</p>`;
+    : `<p class="ajuda tiles-vazio">Nenhum valor informado neste período. Preencha a parte <b>Financeiro</b> nos pedidos (dá para editar os já salvos).</p>`;
 
   const porMes = Object.fromEntries(meses.map((m) => [m.chave, { pedidos: 0, palito: 0, dias: 0, gp: 0, gd: 0 }]));
   doPeriodo.forEach((p) => {
