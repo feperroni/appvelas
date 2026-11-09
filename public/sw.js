@@ -1,5 +1,5 @@
 // Service worker: guarda o app no celular para funcionar sem internet.
-const CACHE = "pedido-velas-v10";
+const CACHE = "pedido-velas-v11";
 const ARQUIVOS = [
   "./",
   "index.html",

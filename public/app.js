@@ -30,6 +30,7 @@ const BASE_RASCUNHO = "pedidoVelas.v1";        // pedido em andamento + lista de
 const BASE_HIST = "pedidoVelas.historico";     // pedidos guardados
 const USUARIO_KEY = "pedidoVelas.usuario";     // último usuário logado (para abrir offline)
 const TEM_SERVIDOR_KEY = "pedidoVelas.temServidor";
+const APP_VERSAO = "11"; // troque junto com a versão do cache em sw.js
 const COR_EXTRA = "#cccccc";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
@@ -243,6 +244,7 @@ function atualizarConta() {
   $("contaInicial").textContent = usuario.usuario.charAt(0).toUpperCase() || "?";
   b.title = usuario.usuario;
   $("contaLogin").textContent = usuario.usuario;
+  $("appVersao").textContent = "versão " + APP_VERSAO;
 }
 
 $("btnConta").addEventListener("click", () => $("dlgConta").showModal());
@@ -292,10 +294,14 @@ function sincronizar() {
 
       const { cores } = await api("GET", "api/cores");
       if (Array.isArray(cores) && cores.length) {
-        ultimasCoresEnviadas = JSON.stringify(cores);
-        state.cores = cores;
-        salvar();
-        if (document.body.dataset.tab === "pedido") render();
+        const remotas = normalizarCores(cores);
+        ultimasCoresEnviadas = JSON.stringify(remotas);
+        // só redesenha a lista se as cores mudaram de verdade (ex.: editadas em outro celular)
+        if (JSON.stringify(normalizarCores(state.cores)) !== ultimasCoresEnviadas) {
+          state.cores = remotas;
+          salvar();
+          renderSemAtrapalhar();
+        }
       } else {
         ultimasCoresEnviadas = null;
         salvar(); // banco ainda sem cores: envia as deste celular
@@ -313,9 +319,29 @@ function sincronizar() {
   return sincronizando;
 }
 
+// Mesma ordem de campos sempre (o banco devolve {css, nome}; o app usa {nome, css}).
+const normalizarCores = (lista) => lista.map((c) => ({ nome: c.nome, css: c.css }));
+
+// Redesenha a lista de cores, mas nunca enquanto a pessoa está digitando nela:
+// espera ela sair do campo (senão o teclado fecha e a digitação se perde).
+let renderPendente = false;
+function renderSemAtrapalhar() {
+  if (document.body.dataset.tab !== "pedido") { render(); return; }
+  if ($("lista").contains(document.activeElement)) { renderPendente = true; return; }
+  render();
+}
+$("lista").addEventListener("focusout", () => {
+  setTimeout(() => {
+    if (renderPendente && !$("lista").contains(document.activeElement)) {
+      renderPendente = false;
+      render();
+    }
+  }, 0);
+});
+
 function enviarCoresSeMudou(cores) {
   if (!servidor) return;
-  const json = JSON.stringify(cores);
+  const json = JSON.stringify(normalizarCores(cores));
   if (json === ultimasCoresEnviadas) return;
   clearTimeout(timerCores);
   timerCores = setTimeout(async () => {
@@ -472,22 +498,27 @@ function render() {
           <button type="button" class="mini remover" title="Remover cor" aria-label="Remover cor">✕</button>
         </span>
       </div>
-      <input type="number" inputmode="numeric" min="0" step="1" data-tipo="palito" aria-label="Palito ${esc(cor.nome)}" placeholder="0">
-      <input type="number" inputmode="numeric" min="0" step="1" data-tipo="dias" aria-label="7 Dias ${esc(cor.nome)}" placeholder="0">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" class="qtd" data-tipo="palito" aria-label="Palito ${esc(cor.nome)}" placeholder="0">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" class="qtd" data-tipo="dias" aria-label="7 Dias ${esc(cor.nome)}" placeholder="0">
     `;
+    li.dataset.cor = cor.nome;
     li.querySelector(".nome").textContent = cor.nome;
-    li.querySelectorAll("input").forEach((inp) => {
+    li.querySelectorAll("input.qtd").forEach((inp) => {
       const v = q[inp.dataset.tipo];
       if (v) inp.value = v;
-      inp.addEventListener("input", () => {
-        const n = Math.max(0, parseInt(inp.value, 10) || 0);
-        state.qtd[cor.nome] = state.qtd[cor.nome] || {};
-        state.qtd[cor.nome][inp.dataset.tipo] = n;
+      // Campo de texto com teclado numérico: funciona igual em qualquer teclado de celular
+      // (o type="number" devolve vazio em alguns teclados e a quantidade se perdia).
+      const aoDigitar = () => {
+        const limpo = inp.value.replace(/\D/g, "");
+        if (limpo !== inp.value) inp.value = limpo;
+        lerQuantidade(cor.nome, inp);
         marcar(li, cor.nome);
-        atualizarTotais();
         salvar(); // autosave
-      });
-      inp.addEventListener("focus", () => inp.select());
+        atualizarTotais();
+      };
+      inp.addEventListener("input", aoDigitar);
+      inp.addEventListener("change", aoDigitar);
+      inp.addEventListener("focus", () => { try { inp.select(); } catch (e) {} });
     });
     li.querySelector(".remover").addEventListener("click", () => {
       if (!confirm(`Remover a cor "${cor.nome}"?`)) return;
@@ -519,6 +550,21 @@ function render() {
 function marcar(li, nome) {
   const q = state.qtd[nome] || {};
   li.classList.toggle("filled", (q.palito || 0) + (q.dias || 0) > 0);
+}
+
+function lerQuantidade(nomeCor, inp) {
+  const n = parseInt(String(inp.value).replace(/\D/g, ""), 10) || 0;
+  state.qtd[nomeCor] = state.qtd[nomeCor] || {};
+  state.qtd[nomeCor][inp.dataset.tipo] = n;
+}
+
+// Garante que o que está visível na tela é o que vai ser salvo/exportado.
+function lerQuantidadesDaTela() {
+  document.querySelectorAll("#lista .item").forEach((li) => {
+    li.querySelectorAll("input.qtd").forEach((inp) => lerQuantidade(li.dataset.cor, inp));
+  });
+  salvar();
+  atualizarTotais();
 }
 
 function itens(tipo) {
@@ -579,6 +625,7 @@ function preencherCampos() {
 }
 
 function temItens() {
+  lerQuantidadesDaTela();
   if (itens("palito").length || itens("dias").length) return true;
   toast("Preencha pelo menos uma quantidade");
   return false;

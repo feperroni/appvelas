@@ -71,4 +71,4 @@ Depois abra `http://localhost:3000`.
 
 ## Mudar a lista padrão de cores
 Edite `CORES_PADRAO` no topo de `public/app.js`. (Com o servidor, a lista usada é a que está no banco; o link "Restaurar cores padrão" aplica a lista do código.)
-Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v10` → `v11`) para os celulares pegarem a atualização.
+Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v11` → `v12`) e `APP_VERSAO` em `public/app.js` para os celulares pegarem a atualização.

@@ -102,14 +102,11 @@ input[type="text"] {
   display: block; margin: 14px auto 0; border: 0; background: none;
   color: var(--muted); font-size: .85rem; text-decoration: underline; cursor: pointer;
 }
-.item input[type="number"] {
+.item input.qtd {
   width: 100%; padding: 10px 4px; font-size: 1.05rem; text-align: center;
   border: 1px solid var(--border); border-radius: 10px;
   background: var(--bg); color: var(--text);
-  -moz-appearance: textfield;
 }
-.item input::-webkit-outer-spin-button,
-.item input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .add-color { display: flex; gap: 8px; margin-top: 12px; }
 .add-color button {
