@@ -1,0 +1,12 @@
+{
+  "name": "Pedido de Velas",
+  "short_name": "Velas",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3fa",
+  "theme_color": "#5b2a86",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

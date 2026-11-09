@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#5b2a86">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pedido de Velas">
+  <title>Pedido de Velas</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Pedido de Velas</h1>
+    <div class="totals" id="totals">Palito: 0 · 7 Dias: 0</div>
+  </header>
+
+  <main>
+    <section class="order-info">
+      <label>Cliente / Terreiro
+        <input type="text" id="cliente" placeholder="Nome (opcional)" autocomplete="off">
+      </label>
+      <label>Observações
+        <input type="text" id="obs" placeholder="(opcional)" autocomplete="off">
+      </label>
+    </section>
+
+    <div class="table-head">
+      <span>Cor</span>
+      <span>Palito</span>
+      <span>7 Dias</span>
+    </div>
+    <ul id="lista" class="lista"></ul>
+
+    <form id="addForm" class="add-color">
+      <input type="text" id="novaCor" placeholder="Adicionar outra cor..." autocomplete="off">
+      <button type="submit">+</button>
+    </form>
+  </main>
+
+  <footer class="actions">
+    <button id="btnLimpar" class="btn ghost">Limpar</button>
+    <button id="btnSalvar" class="btn">Salvar</button>
+    <button id="btnPdf" class="btn primary">PDF</button>
+    <button id="btnExcel" class="btn primary">Excel</button>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
