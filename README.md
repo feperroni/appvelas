@@ -18,11 +18,12 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 - Instalável na tela inicial e funciona offline.
 
 ## Usuários
-- O **primeiro administrador** é criado pelas variáveis `ADMIN_USUARIO` e `ADMIN_SENHA` (só na primeira vez; depois a senha é trocada pelo app).
-- O administrador toca no **círculo com a inicial** (canto superior direito) → **Usuários** para criar usuários, trocar a senha de alguém ou excluir um usuário (os pedidos dele são apagados junto).
-- Qualquer usuário pode trocar a própria senha e **Sair** pelo mesmo menu. Ao sair, os dados dele são apagados do celular (continuam no servidor).
-- Usuário para login: 3 a 40 letras minúsculas, números, ponto, hífen ou `_`. Senha: mínimo 6 caracteres.
-- Pedidos que existiam antes do login ficam com o primeiro administrador.
+- Ao abrir o link aparece a tela de login com **Usuário**, **Senha** e os botões **Criar conta** e **Entrar**, mais um quadro "Como funciona".
+- **Criar conta**: a pessoa escolhe usuário e senha e já entra. **Entrar**: para quem já tem conta.
+- A pessoa fica conectada no celular por 180 dias. No **círculo com a inicial** (canto superior direito) ela troca a senha ou **Sai**. Ao sair, os dados dela são apagados do celular (continuam no servidor).
+- Usuário: 3 a 40 letras/números, sem espaços (pode usar ponto, hífen ou `_`). Senha: mínimo 6 caracteres.
+- **Não há recuperação de senha.** Quem esquecer a senha precisa criar outra conta.
+- Pedidos que existiam antes do login ficam com o primeiro usuário cadastrado.
 
 ## Estrutura
 ```
@@ -37,10 +38,8 @@ As tabelas do banco (`usuarios`, `sessoes`, `pedidos` e `config`) são criadas a
 2. No mesmo projeto: **+ Create → Database → PostgreSQL**.
 3. Abra o serviço do app → aba **Variables** e adicione:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referência ao banco criado no passo 2)
-   - `ADMIN_USUARIO` = seu login de administrador, por exemplo `admin`
-   - `ADMIN_SENHA` = uma senha forte para esse administrador
 4. Aba **Settings → Networking → Generate Domain** para ganhar o link público (`https://....up.railway.app`).
-5. Abra o link no celular, entre com o administrador e crie os outros usuários em **Usuários**.
+5. Abra o link no celular, toque em **Criar conta** e instale na tela inicial.
 
 O Railway detecta o Node sozinho e roda `npm start`. A cada `git push` na `main` ele publica a nova versão.
 
@@ -51,15 +50,13 @@ Os pedidos que já estavam guardados no celular são enviados para a conta do pr
 | Variável | Obrigatória | Para quê |
 |---|---|---|
 | `DATABASE_URL` | sim | conexão do Postgres |
-| `ADMIN_USUARIO` | sim, na primeira vez | login do primeiro administrador |
-| `ADMIN_SENHA` | sim, na primeira vez | senha inicial desse administrador |
 | `PGSSL` | não | `true` para usar SSL (só se usar a URL pública do banco) |
 | `PORT` | não | o Railway define sozinho |
 
 ## Rodar no computador
 ```bash
 npm install
-DATABASE_URL=postgres://usuario:senha@localhost:5432/velas ADMIN_USUARIO=admin ADMIN_SENHA=troque-esta-senha npm start
+DATABASE_URL=postgres://usuario:senha@localhost:5432/velas npm start
 ```
 Depois abra `http://localhost:3000`.
 
@@ -69,4 +66,4 @@ Depois abra `http://localhost:3000`.
 
 ## Mudar a lista padrão de cores
 Edite `CORES_PADRAO` no topo de `public/app.js`. (Com o servidor, a lista usada é a que está no banco; o link "Restaurar cores padrão" aplica a lista do código.)
-Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v7` → `v8`) para os celulares pegarem a atualização.
+Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v8` → `v9`) para os celulares pegarem a atualização.

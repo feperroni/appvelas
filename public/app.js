@@ -42,7 +42,7 @@ let state = null;
 // pedidos: [{id, data: ISO, nome, cliente, obs, palito: [[cor, qtd]], dias: [[cor, qtd]],
 //            fin: {kgPalito, valorPalito, valorDias} | null, salvo}]
 let pedidos = [];
-// usuário logado: {id, usuario, nome, admin}; null = app sem servidor (dados só no celular)
+// usuário logado: {id, usuario}; null = app sem servidor (dados só no celular)
 let usuario = null;
 
 const sufixo = () => (usuario ? ":" + usuario.id : ":local");
@@ -208,37 +208,41 @@ function mostrarLogin(msg) {
   setTimeout(() => ($("loginUsuario").value ? $("loginSenha") : $("loginUsuario")).focus(), 50);
 }
 
-$("formLogin").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = $("btnEntrar");
-  btn.disabled = true;
+// "Entrar" (rota api/login) e "Criar conta" (rota api/cadastro) usam os mesmos campos.
+async function acessar(rota) {
+  const usuarioDigitado = $("loginUsuario").value.trim();
+  const senha = $("loginSenha").value;
+  const erro = (msg) => { $("loginErro").textContent = msg; $("loginErro").hidden = false; };
   $("loginErro").hidden = true;
+  if (!usuarioDigitado || !senha) return erro("Preencha usuário e senha.");
+  if (rota === "api/cadastro" && senha.length < 6) return erro("A senha precisa ter pelo menos 6 caracteres.");
+  const botoes = [$("btnEntrar"), $("btnCriarConta")];
+  botoes.forEach((b) => (b.disabled = true));
   try {
-    const u = await api("POST", "api/login", { usuario: $("loginUsuario").value, senha: $("loginSenha").value });
+    const u = await api("POST", rota, { usuario: usuarioDigitado, senha });
+    $("loginSenha").value = "";
     abrirComo(u);
     servidor = true;
     sincronizar();
-    toast(`Olá, ${u.nome || u.usuario}!`);
+    toast(rota === "api/cadastro" ? `Conta criada! Bem-vindo(a), ${u.usuario}` : `Olá, ${u.usuario}!`);
   } catch (err) {
-    $("loginErro").textContent = err.status ? err.message : "Sem conexão com o servidor.";
-    $("loginErro").hidden = false;
+    erro(err.status ? err.message : "Sem conexão com o servidor.");
   } finally {
-    btn.disabled = false;
-    $("loginSenha").value = "";
+    botoes.forEach((b) => (b.disabled = false));
   }
-});
+}
+
+$("formLogin").addEventListener("submit", (e) => { e.preventDefault(); acessar("api/login"); });
+$("btnCriarConta").addEventListener("click", () => acessar("api/cadastro"));
 
 // ---------- Conta ----------
 function atualizarConta() {
   const b = $("btnConta");
   b.hidden = !usuario;
   if (!usuario) return;
-  const nome = usuario.nome || usuario.usuario;
-  $("contaInicial").textContent = nome.trim().charAt(0).toUpperCase() || "?";
-  b.title = nome;
-  $("contaNome").textContent = nome;
-  $("contaLogin").textContent = `Usuário: ${usuario.usuario}${usuario.admin ? " · administrador" : ""}`;
-  $("btnUsuarios").hidden = !usuario.admin;
+  $("contaInicial").textContent = usuario.usuario.charAt(0).toUpperCase() || "?";
+  b.title = usuario.usuario;
+  $("contaLogin").textContent = usuario.usuario;
 }
 
 $("btnConta").addEventListener("click", () => $("dlgConta").showModal());
@@ -269,65 +273,6 @@ $("btnSair").addEventListener("click", async () => {
   mostrarLogin();
 });
 
-// ---------- Usuários (administrador) ----------
-async function carregarUsuarios() {
-  const ul = $("listaUsuarios");
-  ul.innerHTML = `<li class="nada">Carregando...</li>`;
-  try {
-    const lista = await api("GET", "api/usuarios");
-    ul.innerHTML = "";
-    lista.forEach((u) => {
-      const li = document.createElement("li");
-      const eu = u.id === usuario.id;
-      li.innerHTML = `
-        <div class="u-info">
-          <b>${esc(u.nome || u.usuario)}</b>${u.admin ? ' <span class="tag">admin</span>' : ""}${eu ? ' <span class="tag">você</span>' : ""}
-          <small>${esc(u.usuario)} · ${u.pedidos} pedido(s)</small>
-        </div>
-        <div class="u-acoes">
-          <button type="button" class="btn sm" data-a="senha">Senha</button>
-          ${eu ? "" : `<button type="button" class="btn sm perigo" data-a="excluir">Excluir</button>`}
-        </div>`;
-      li.querySelector('[data-a="senha"]').onclick = async () => {
-        const nova = prompt(`Nova senha para "${u.usuario}" (mín. 6 caracteres):`);
-        if (nova === null) return;
-        try { await api("PUT", "api/usuarios/" + u.id, { senha: nova }); toast("Senha alterada ✔"); }
-        catch (err) { toast(err.status ? err.message : "Sem conexão com o servidor"); }
-      };
-      const ex = li.querySelector('[data-a="excluir"]');
-      if (ex) ex.onclick = async () => {
-        if (!confirm(`Excluir o usuário "${u.usuario}"? Os ${u.pedidos} pedido(s) dele também serão apagados. Isso não pode ser desfeito.`)) return;
-        try { await api("DELETE", "api/usuarios/" + u.id); toast("Usuário excluído"); carregarUsuarios(); }
-        catch (err) { toast(err.status ? err.message : "Sem conexão com o servidor"); }
-      };
-      ul.appendChild(li);
-    });
-  } catch (err) {
-    ul.innerHTML = `<li class="nada">${err.status ? esc(err.message) : "Sem conexão com o servidor."}</li>`;
-  }
-}
-
-$("btnUsuarios").addEventListener("click", () => {
-  $("dlgConta").close();
-  $("dlgUsuarios").showModal();
-  carregarUsuarios();
-});
-$("btnFecharUsuarios").addEventListener("click", () => $("dlgUsuarios").close());
-
-$("formNovoUsuario").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    await api("POST", "api/usuarios", {
-      nome: $("nuNome").value, usuario: $("nuUsuario").value,
-      senha: $("nuSenha").value, admin: $("nuAdmin").checked,
-    });
-    toast(`Usuário "${$("nuUsuario").value.trim().toLowerCase()}" criado ✔`);
-    $("formNovoUsuario").reset();
-    carregarUsuarios();
-  } catch (err) {
-    toast(err.status ? err.message : "Sem conexão com o servidor");
-  }
-});
 
 // Envia pedidos pendentes, baixa todos do banco e sincroniza a lista de cores.
 function sincronizar() {

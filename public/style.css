@@ -20,6 +20,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -279,6 +280,15 @@ select {
   border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
 }
 .login-card .btn { padding: 14px; font-size: 1rem; }
+.login-botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.login-banner {
+  margin-top: 6px; padding: 12px 14px; border-radius: 12px; font-size: .85rem; line-height: 1.45;
+  background: color-mix(in srgb, var(--primary) 9%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.login-banner h2 { margin: 0 0 6px; font-size: .95rem; }
+.login-banner ol { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+.login-banner ul { margin: 0; padding: 8px 0 0; list-style: none; display: grid; gap: 4px; border-top: 1px solid var(--border); }
 .erro { margin: 0; color: #c0392b; font-size: .88rem; }
 .btn:disabled { opacity: .6; }
 
@@ -289,21 +299,6 @@ select {
 .form-grade input[type="text"], .form-grade input[type="password"] {
   width: 100%; padding: 10px 12px; font-size: 1rem;
   border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
-}
-.check { display: flex; align-items: center; gap: 8px; font-size: .88rem; }
-.usuarios { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.usuarios li {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
-}
-.usuarios li.nada { border: 0; padding: 0; }
-.u-info { min-width: 0; overflow-wrap: anywhere; }
-.u-info small { display: block; color: var(--muted); }
-.u-acoes { display: flex; gap: 6px; flex: 0 0 auto; }
-.u-acoes .btn { padding: 6px 10px; }
-.tag {
-  font-size: .7rem; padding: 1px 6px; border-radius: 6px; vertical-align: middle;
-  background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--text);
 }
 
 /* ===== Edição, nome, busca ===== */

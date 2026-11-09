@@ -183,14 +183,31 @@
         <input type="password" id="loginSenha" autocomplete="current-password" required>
       </label>
       <p class="erro" id="loginErro" hidden></p>
-      <button type="submit" class="btn primary" id="btnEntrar">Entrar</button>
+      <div class="login-botoes">
+        <button type="button" class="btn" id="btnCriarConta">Criar conta</button>
+        <button type="submit" class="btn primary" id="btnEntrar">Entrar</button>
+      </div>
+
+      <section class="login-banner" aria-label="Como funciona o acesso">
+        <h2>Como funciona</h2>
+        <ol>
+          <li><b>Primeira vez?</b> Escolha um <b>usuário</b> (sem espaços, ex.: <i>paijoao</i>) e uma <b>senha</b> com pelo menos 6 caracteres e toque em <b>Criar conta</b>.</li>
+          <li><b>Já tem conta?</b> Digite seu usuário e senha e toque em <b>Entrar</b>.</li>
+          <li>Você continua conectado neste celular. Não precisa entrar de novo a cada uso.</li>
+        </ol>
+        <ul>
+          <li>🔒 <b>Seus pedidos são só seus.</b> Ninguém mais vê o que você guarda.</li>
+          <li>📱 Use o mesmo usuário e senha em outro celular para ver seus pedidos lá também.</li>
+          <li>⚠️ <b>Anote sua senha.</b> Não há como recuperá-la se você esquecer. Dá para trocar a senha depois, no círculo com a sua inicial, no topo do app.</li>
+        </ul>
+      </section>
     </form>
   </div>
 
   <!-- ===== CONTA ===== -->
   <dialog id="dlgConta" class="dlg">
-    <h2 id="contaNome">Minha conta</h2>
-    <p class="ajuda" id="contaLogin"></p>
+    <h2>Minha conta</h2>
+    <p class="ajuda">Usuário: <b id="contaLogin"></b></p>
     <form id="formSenha" class="form-grade">
       <h3>Trocar senha</h3>
       <input type="password" id="senhaAtual" placeholder="Senha atual" autocomplete="current-password" required>
@@ -198,27 +215,8 @@
       <button type="submit" class="btn">Salvar nova senha</button>
     </form>
     <div class="dlg-acoes">
-      <button type="button" class="btn" id="btnUsuarios" hidden>Usuários</button>
       <button type="button" class="btn perigo" id="btnSair">Sair</button>
       <button type="button" class="btn ghost" id="btnFecharConta">Fechar</button>
-    </div>
-  </dialog>
-
-  <!-- ===== USUÁRIOS (admin) ===== -->
-  <dialog id="dlgUsuarios" class="dlg">
-    <h2>Usuários</h2>
-    <p class="ajuda">Cada usuário vê apenas os próprios pedidos.</p>
-    <ul class="usuarios" id="listaUsuarios"></ul>
-    <form id="formNovoUsuario" class="form-grade">
-      <h3>Novo usuário</h3>
-      <input type="text" id="nuNome" placeholder="Nome (ex.: Terreiro Pai João)" maxlength="100">
-      <input type="text" id="nuUsuario" placeholder="Usuário para login (ex.: paijoao)" autocapitalize="none" spellcheck="false" required>
-      <input type="password" id="nuSenha" placeholder="Senha (mín. 6)" autocomplete="new-password" minlength="6" required>
-      <label class="check"><input type="checkbox" id="nuAdmin"> Administrador (pode gerenciar usuários)</label>
-      <button type="submit" class="btn primary">Criar usuário</button>
-    </form>
-    <div class="dlg-acoes">
-      <button type="button" class="btn ghost" id="btnFecharUsuarios">Fechar</button>
     </div>
   </dialog>
 

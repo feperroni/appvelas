@@ -1,11 +1,10 @@
 // Servidor do app Pedido de Velas: serve a pasta public/ e a API em /api,
 // guardando usuários, pedidos e listas de cores no Postgres.
-// Cada usuário só enxerga e altera os próprios pedidos.
+// Qualquer pessoa cria a própria conta (usuário e senha) na tela de login,
+// e cada usuário só enxerga e altera os próprios pedidos.
 //
 // Variáveis de ambiente:
 //   DATABASE_URL   (obrigatória) conexão do Postgres. No Railway: ${{Postgres.DATABASE_URL}}
-//   ADMIN_USUARIO  (recomendada) login do primeiro administrador (criado se ainda não existir)
-//   ADMIN_SENHA    (recomendada) senha inicial desse administrador
 //   PGSSL=true     (opcional)    usa SSL na conexão (necessário só com a URL pública do banco)
 //   PORT           definida pelo Railway automaticamente
 import express from "express";
@@ -114,36 +113,21 @@ async function prepararBanco() {
     }
   }
 
-  // Primeiro administrador, a partir das variáveis de ambiente.
-  const login = normalizarLogin(process.env.ADMIN_USUARIO);
-  const senha = process.env.ADMIN_SENHA || "";
-  if (login && senha) {
-    if (!loginValido(login)) {
-      console.error("ADMIN_USUARIO inválido: use 3 a 40 letras minúsculas, números, ponto, hífen ou _.");
-    } else {
-      const r = await pool.query(
-        `INSERT INTO usuarios (usuario, nome, senha_hash, admin) VALUES ($1, $1, $2, true)
-         ON CONFLICT (usuario) DO NOTHING RETURNING id`,
-        [login, await gerarHash(senha)]
-      );
-      if (r.rowCount) console.log(`Administrador "${login}" criado.`);
-    }
-  }
+  await atribuirDadosSemDono();
+}
 
-  // Pedidos e cores de antes do login passam para o primeiro administrador.
-  const { rows } = await pool.query("SELECT id FROM usuarios WHERE admin ORDER BY id LIMIT 1");
-  if (rows[0]) {
-    const adm = rows[0].id;
-    const r = await pool.query("UPDATE pedidos SET usuario_id = $1 WHERE usuario_id IS NULL", [adm]);
-    if (r.rowCount) console.log(`${r.rowCount} pedido(s) antigos atribuídos ao administrador.`);
-    await pool.query(
-      `INSERT INTO config (chave, valor) SELECT $1, valor FROM config WHERE chave = 'cores'
-       ON CONFLICT (chave) DO NOTHING`,
-      [`cores:${adm}`]
-    );
-  } else {
-    console.warn("Nenhum usuário cadastrado. Defina ADMIN_USUARIO e ADMIN_SENHA para criar o administrador.");
-  }
+// Pedidos e cores de antes do login (sem dono) passam para o primeiro usuário cadastrado.
+async function atribuirDadosSemDono() {
+  const { rows } = await pool.query("SELECT id FROM usuarios ORDER BY id LIMIT 1");
+  if (!rows[0]) return;
+  const dono = rows[0].id;
+  const r = await pool.query("UPDATE pedidos SET usuario_id = $1 WHERE usuario_id IS NULL", [dono]);
+  if (r.rowCount) console.log(`${r.rowCount} pedido(s) antigos atribuídos ao usuário ${dono}.`);
+  await pool.query(
+    `INSERT INTO config (chave, valor) SELECT $1, valor FROM config WHERE chave = 'cores'
+     ON CONFLICT (chave) DO NOTHING`,
+    [`cores:${dono}`]
+  );
 }
 
 // ---------- validação ----------
@@ -208,7 +192,16 @@ app.set("trust proxy", 1); // Railway fica atrás de um proxy HTTPS
 app.use(express.json({ limit: "2mb" }));
 
 const ok = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const publicoUsuario = (u) => ({ id: u.id, usuario: u.usuario, nome: u.nome, admin: u.admin });
+const publicoUsuario = (u) => ({ id: u.id, usuario: u.usuario });
+
+async function criarSessao(req, res, usuarioId) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  await pool.query(
+    `INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES ($1, $2, now() + interval '${SESSAO_DIAS} days')`,
+    [sha256(token), usuarioId]
+  );
+  gravarCookie(req, res, token, SESSAO_DIAS * 86400);
+}
 
 app.get("/api/saude", (req, res) => res.json({ ok: true, login: true }));
 
@@ -237,13 +230,38 @@ app.post("/api/login", ok(async (req, res) => {
     return res.status(401).json({ erro: "Usuário ou senha incorretos" });
   }
   tentativas.delete(ip);
-  const token = crypto.randomBytes(32).toString("base64url");
-  await pool.query(
-    `INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES ($1, $2, now() + interval '${SESSAO_DIAS} days')`,
-    [sha256(token), u.id]
-  );
-  gravarCookie(req, res, token, SESSAO_DIAS * 86400);
+  await criarSessao(req, res, u.id);
   res.json(publicoUsuario(u));
+}));
+
+// Cadastro aberto: a pessoa escolhe usuário e senha e já entra.
+// Limite de 10 contas novas por IP a cada hora, para evitar abuso.
+const cadastros = new Map();
+app.post("/api/cadastro", ok(async (req, res) => {
+  const ip = req.ip;
+  const c = cadastros.get(ip);
+  if (c && Date.now() - c.inicio < 60 * 60_000 && c.n >= 10) {
+    return res.status(429).json({ erro: "Muitas contas criadas. Tente mais tarde." });
+  }
+  const login = normalizarLogin(req.body?.usuario);
+  const senha = req.body?.senha;
+  if (!loginValido(login)) {
+    return res.status(400).json({ erro: "Usuário: de 3 a 40 letras ou números, sem espaços (pode usar ponto, hífen ou _)" });
+  }
+  if (typeof senha !== "string" || senha.length < 6) {
+    return res.status(400).json({ erro: "A senha precisa ter pelo menos 6 caracteres" });
+  }
+  const r = await pool.query(
+    `INSERT INTO usuarios (usuario, nome, senha_hash) VALUES ($1, $1, $2)
+     ON CONFLICT (usuario) DO NOTHING RETURNING id, usuario`,
+    [login, await gerarHash(senha)]
+  );
+  if (!r.rowCount) return res.status(409).json({ erro: "Esse usuário já existe. Escolha outro ou toque em Entrar." });
+  if (!c || Date.now() - c.inicio >= 60 * 60_000) cadastros.set(ip, { inicio: Date.now(), n: 1 });
+  else c.n++;
+  await atribuirDadosSemDono();
+  await criarSessao(req, res, r.rows[0].id);
+  res.json(publicoUsuario(r.rows[0]));
 }));
 
 app.post("/api/logout", ok(async (req, res) => {
@@ -267,9 +285,6 @@ app.use("/api", ok(async (req, res, next) => {
   res.status(401).json({ erro: "Faça login" });
 }));
 
-const soAdmin = (req, res, next) =>
-  req.usuario.admin ? next() : res.status(403).json({ erro: "Apenas administradores" });
-
 app.get("/api/eu", (req, res) => res.json(publicoUsuario(req.usuario)));
 
 app.post("/api/senha", ok(async (req, res) => {
@@ -284,66 +299,6 @@ app.post("/api/senha", ok(async (req, res) => {
   // encerra as outras sessões deste usuário
   await pool.query("DELETE FROM sessoes WHERE usuario_id = $1 AND token_hash <> $2",
     [req.usuario.id, sha256(lerCookie(req, COOKIE))]);
-  res.json({ ok: true });
-}));
-
-// ---------- usuários (admin) ----------
-app.get("/api/usuarios", soAdmin, ok(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT u.id, u.usuario, u.nome, u.admin, count(p.id)::int AS pedidos
-     FROM usuarios u LEFT JOIN pedidos p ON p.usuario_id = u.id
-     GROUP BY u.id ORDER BY u.nome, u.usuario`
-  );
-  res.json(rows);
-}));
-
-app.post("/api/usuarios", soAdmin, ok(async (req, res) => {
-  const login = normalizarLogin(req.body?.usuario);
-  const nome = texto(req.body?.nome, 100).trim() || login;
-  const senha = req.body?.senha;
-  if (!loginValido(login)) {
-    return res.status(400).json({ erro: "Usuário: 3 a 40 letras minúsculas, números, ponto, hífen ou _ (sem espaços)" });
-  }
-  if (typeof senha !== "string" || senha.length < 6) {
-    return res.status(400).json({ erro: "A senha precisa ter pelo menos 6 caracteres" });
-  }
-  const r = await pool.query(
-    `INSERT INTO usuarios (usuario, nome, senha_hash, admin) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (usuario) DO NOTHING RETURNING id, usuario, nome, admin`,
-    [login, nome, await gerarHash(senha), req.body?.admin === true]
-  );
-  if (!r.rowCount) return res.status(409).json({ erro: "Esse usuário já existe" });
-  res.json(r.rows[0]);
-}));
-
-app.put("/api/usuarios/:id", soAdmin, ok(async (req, res) => {
-  const id = Number(req.params.id);
-  const { nome, senha, admin } = req.body || {};
-  if (id === req.usuario.id && admin === false) {
-    return res.status(400).json({ erro: "Você não pode tirar o seu próprio acesso de administrador" });
-  }
-  if (senha !== undefined && (typeof senha !== "string" || senha.length < 6)) {
-    return res.status(400).json({ erro: "A senha precisa ter pelo menos 6 caracteres" });
-  }
-  const r = await pool.query(
-    `UPDATE usuarios SET
-       nome = COALESCE($2, nome),
-       senha_hash = COALESCE($3, senha_hash),
-       admin = COALESCE($4, admin)
-     WHERE id = $1 RETURNING id`,
-    [id, typeof nome === "string" && nome.trim() ? nome.trim().slice(0, 100) : null,
-     senha ? await gerarHash(senha) : null, typeof admin === "boolean" ? admin : null]
-  );
-  if (!r.rowCount) return res.status(404).json({ erro: "Usuário não encontrado" });
-  if (senha) await pool.query("DELETE FROM sessoes WHERE usuario_id = $1", [id]); // força novo login
-  res.json({ ok: true });
-}));
-
-app.delete("/api/usuarios/:id", soAdmin, ok(async (req, res) => {
-  const id = Number(req.params.id);
-  if (id === req.usuario.id) return res.status(400).json({ erro: "Você não pode excluir a si mesmo" });
-  await pool.query("DELETE FROM config WHERE chave = $1", [`cores:${id}`]);
-  await pool.query("DELETE FROM usuarios WHERE id = $1", [id]); // pedidos e sessões vão junto
   res.json({ ok: true });
 }));
 
