@@ -24,8 +24,12 @@ const CORES_PADRAO = [
   ["Verde e Vermelha", "linear-gradient(90deg,#1f9a3a 50%,#d01c1c 50%)"],
 ];
 
-const STORAGE_KEY = "pedidoVelas.v1";          // pedido em andamento + lista de cores
-const HIST_KEY = "pedidoVelas.historico";      // pedidos guardados
+// Dados guardados no celular. Cada usuário tem as próprias chaves (sufixo ":<id>"),
+// para que quem usar o mesmo celular depois não veja os pedidos de outra pessoa.
+const BASE_RASCUNHO = "pedidoVelas.v1";        // pedido em andamento + lista de cores
+const BASE_HIST = "pedidoVelas.historico";     // pedidos guardados
+const USUARIO_KEY = "pedidoVelas.usuario";     // último usuário logado (para abrir offline)
+const TEM_SERVIDOR_KEY = "pedidoVelas.temServidor";
 const COR_EXTRA = "#cccccc";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
@@ -34,10 +38,36 @@ const $ = (id) => document.getElementById(id);
 // ================= Estado =================
 // state: { cores: [{nome, css}], qtd: {nome: {palito, dias}}, nome, cliente, obs,
 //          fin: {kg, vp, vd} (texto digitado), editando: id do pedido em edição ou null }
-let state = carregar();
+let state = null;
 // pedidos: [{id, data: ISO, nome, cliente, obs, palito: [[cor, qtd]], dias: [[cor, qtd]],
 //            fin: {kgPalito, valorPalito, valorDias} | null, salvo}]
-let pedidos = carregarHistorico();
+let pedidos = [];
+// usuário logado: {id, usuario, nome, admin}; null = app sem servidor (dados só no celular)
+let usuario = null;
+
+const sufixo = () => (usuario ? ":" + usuario.id : ":local");
+const chaveRascunho = () => BASE_RASCUNHO + sufixo();
+const chaveHist = () => BASE_HIST + sufixo();
+
+const ls = {
+  get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+  del: (k) => { try { localStorage.removeItem(k); } catch (e) {} },
+};
+
+// Dados de antes do login (versões antigas do app) passam para o primeiro usuário que entrar.
+function adotarDadosAntigos() {
+  for (const base of [BASE_RASCUNHO, BASE_HIST]) {
+    const destino = base + sufixo();
+    if (ls.get(destino) != null) continue;
+    const origens = usuario ? [base, base + ":local"] : [base];
+    for (const o of origens) {
+      const v = ls.get(o);
+      if (v != null) { ls.set(destino, v); ls.del(o); break; }
+    }
+  }
+  ls.del("pedidoVelas.pin"); // código de acesso antigo, não é mais usado
+}
 
 function coresPadrao() {
   return CORES_PADRAO.map(([nome, css]) => ({ nome, css }));
@@ -45,7 +75,7 @@ function coresPadrao() {
 
 function carregar() {
   let salvo = null;
-  try { salvo = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) {}
+  try { salvo = JSON.parse(ls.get(chaveRascunho())); } catch (e) {}
   let cores;
   if (salvo && Array.isArray(salvo.cores)) {
     cores = salvo.cores;
@@ -66,69 +96,238 @@ function carregar() {
 
 function salvar() {
   const cores = state.cores.map(({ nome, css }) => ({ nome, css }));
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      cores, qtd: state.qtd, nome: state.nome, cliente: state.cliente, obs: state.obs,
-      fin: state.fin, editando: state.editando,
-    }));
-  } catch (e) {}
+  ls.set(chaveRascunho(), JSON.stringify({
+    cores, qtd: state.qtd, nome: state.nome, cliente: state.cliente, obs: state.obs,
+    fin: state.fin, editando: state.editando,
+  }));
   enviarCoresSeMudou(cores);
 }
 
 function carregarHistorico() {
   try {
-    const h = JSON.parse(localStorage.getItem(HIST_KEY));
+    const h = JSON.parse(ls.get(chaveHist()));
     return Array.isArray(h) ? h : [];
   } catch (e) { return []; }
 }
 
 function salvarHistorico() {
-  try {
-    localStorage.setItem(HIST_KEY, JSON.stringify(pedidos));
-    return true;
-  } catch (e) {
-    toast("Não foi possível guardar neste navegador");
-    return false;
-  }
+  if (ls.set(chaveHist(), JSON.stringify(pedidos))) return true;
+  toast("Não foi possível guardar neste navegador");
+  return false;
 }
 
-// ================= Servidor (Postgres) =================
-// Se o app estiver rodando com o servidor (Railway), os pedidos e as cores ficam
-// no banco e são compartilhados entre os celulares. Sem servidor (ex.: GitHub Pages),
-// tudo continua funcionando só no próprio celular.
-const PIN_KEY = "pedidoVelas.pin";
-let servidor = false;
+// ================= Servidor (Postgres) e login =================
+// Com o servidor (Railway), cada usuário entra com usuário e senha e os pedidos dele
+// ficam no banco, acessíveis de qualquer celular. Sem servidor (ex.: abrir o arquivo
+// direto), tudo continua funcionando só no próprio celular.
+let servidor = false; // true = servidor respondeu e o usuário está logado
 let sincronizando = null;
 let ultimasCoresEnviadas = null;
 let timerCores;
 
-async function api(metodo, url, corpo, tentouPin) {
-  let pin = "";
-  try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) {}
+async function api(metodo, url, corpo) {
   const r = await fetch(url, {
     method: metodo,
     cache: "no-store",
-    headers: { "Content-Type": "application/json", "X-App-Pin": pin },
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
-  if (r.status === 401) {
-    const novo = prompt(tentouPin ? "Código incorreto. Digite o código de acesso:" : "Digite o código de acesso do app:");
-    if (novo === null) throw new Error("sem-codigo");
-    try { localStorage.setItem(PIN_KEY, novo.trim()); } catch (e) {}
-    return api(metodo, url, corpo, true);
+  const dados = await r.json().catch(() => ({}));
+  if (r.status === 401 && !url.endsWith("api/login")) {
+    servidor = false;
+    mostrarLogin("Sua sessão terminou. Entre de novo.");
+    throw new Error("sem-sessao");
   }
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+  if (!r.ok) {
+    const e = new Error(dados.erro || "Erro " + r.status);
+    e.status = r.status;
+    throw e;
+  }
+  return dados;
 }
 
-async function iniciarServidor() {
+// Verifica servidor e sessão. Retorna "ok", "login" (precisa entrar) ou "offline".
+async function conectar() {
+  let saude = null;
   try {
     const r = await fetch("api/saude", { cache: "no-store" });
-    servidor = r.ok && (await r.json()).ok === true;
-  } catch (e) { servidor = false; }
-  atualizarStatus();
-  if (servidor) await sincronizar();
+    if (r.ok) saude = await r.json();
+  } catch (e) {}
+  if (!saude || !saude.ok) { servidor = false; return "offline"; }
+  ls.set(TEM_SERVIDOR_KEY, "1");
+  try {
+    const r = await fetch("api/eu", { cache: "no-store", credentials: "same-origin" });
+    if (r.status === 401) { servidor = false; return "login"; }
+    if (!r.ok) throw new Error();
+    const eu = await r.json();
+    if (!usuario || usuario.id !== eu.id) abrirComo(eu);
+    else { usuario = eu; ls.set(USUARIO_KEY, JSON.stringify(eu)); atualizarConta(); }
+    servidor = true;
+    return "ok";
+  } catch (e) { servidor = false; return "offline"; }
 }
+
+async function iniciar() {
+  let cache = null;
+  try { cache = JSON.parse(ls.get(USUARIO_KEY)); } catch (e) {}
+  if (cache) abrirComo(cache); // abre na hora com os dados do celular (funciona sem internet)
+  const r = await conectar();
+  if (r === "login") return mostrarLogin();
+  if (r === "offline" && !cache) {
+    if (ls.get(TEM_SERVIDOR_KEY)) return mostrarLogin("Sem conexão com o servidor. Verifique a internet.");
+    abrirComo(null); // app sem servidor: dados só neste celular
+  }
+  atualizarStatus();
+  if (r === "ok") sincronizar();
+}
+
+// Carrega os dados do usuário (ou do modo sem servidor) e mostra o app.
+function abrirComo(u) {
+  usuario = u;
+  if (u) ls.set(USUARIO_KEY, JSON.stringify(u));
+  adotarDadosAntigos();
+  state = carregar();
+  pedidos = carregarHistorico();
+  ultimasCoresEnviadas = null;
+  $("telaLogin").hidden = true;
+  $("busca").value = "";
+  preencherCampos();
+  render();
+  mostrarAba("pedido");
+  atualizarConta();
+  atualizarStatus();
+}
+
+function mostrarLogin(msg) {
+  $("telaLogin").hidden = false;
+  $("loginErro").hidden = !msg;
+  $("loginErro").textContent = msg || "";
+  $("loginSenha").value = "";
+  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+  setTimeout(() => ($("loginUsuario").value ? $("loginSenha") : $("loginUsuario")).focus(), 50);
+}
+
+$("formLogin").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("btnEntrar");
+  btn.disabled = true;
+  $("loginErro").hidden = true;
+  try {
+    const u = await api("POST", "api/login", { usuario: $("loginUsuario").value, senha: $("loginSenha").value });
+    abrirComo(u);
+    servidor = true;
+    sincronizar();
+    toast(`Olá, ${u.nome || u.usuario}!`);
+  } catch (err) {
+    $("loginErro").textContent = err.status ? err.message : "Sem conexão com o servidor.";
+    $("loginErro").hidden = false;
+  } finally {
+    btn.disabled = false;
+    $("loginSenha").value = "";
+  }
+});
+
+// ---------- Conta ----------
+function atualizarConta() {
+  const b = $("btnConta");
+  b.hidden = !usuario;
+  if (!usuario) return;
+  const nome = usuario.nome || usuario.usuario;
+  $("contaInicial").textContent = nome.trim().charAt(0).toUpperCase() || "?";
+  b.title = nome;
+  $("contaNome").textContent = nome;
+  $("contaLogin").textContent = `Usuário: ${usuario.usuario}${usuario.admin ? " · administrador" : ""}`;
+  $("btnUsuarios").hidden = !usuario.admin;
+}
+
+$("btnConta").addEventListener("click", () => $("dlgConta").showModal());
+$("btnFecharConta").addEventListener("click", () => $("dlgConta").close());
+
+$("formSenha").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("POST", "api/senha", { atual: $("senhaAtual").value, nova: $("senhaNova").value });
+    $("formSenha").reset();
+    toast("Senha alterada ✔");
+  } catch (err) {
+    if (err.message !== "sem-sessao") toast(err.status ? err.message : "Sem conexão com o servidor");
+  }
+});
+
+$("btnSair").addEventListener("click", async () => {
+  const pend = pedidos.filter((p) => !p.salvo).length;
+  const aviso = pend
+    ? `Há ${pend} pedido(s) que ainda não foram enviados ao servidor e serão perdidos. Sair mesmo assim?`
+    : "Sair da sua conta neste celular?";
+  if (!confirm(aviso)) return;
+  try { await api("POST", "api/logout"); } catch (e) {}
+  // apaga os dados deste usuário do celular
+  ls.del(chaveRascunho()); ls.del(chaveHist()); ls.del(USUARIO_KEY);
+  usuario = null; servidor = false; pedidos = [];
+  $("loginUsuario").value = "";
+  mostrarLogin();
+});
+
+// ---------- Usuários (administrador) ----------
+async function carregarUsuarios() {
+  const ul = $("listaUsuarios");
+  ul.innerHTML = `<li class="nada">Carregando...</li>`;
+  try {
+    const lista = await api("GET", "api/usuarios");
+    ul.innerHTML = "";
+    lista.forEach((u) => {
+      const li = document.createElement("li");
+      const eu = u.id === usuario.id;
+      li.innerHTML = `
+        <div class="u-info">
+          <b>${esc(u.nome || u.usuario)}</b>${u.admin ? ' <span class="tag">admin</span>' : ""}${eu ? ' <span class="tag">você</span>' : ""}
+          <small>${esc(u.usuario)} · ${u.pedidos} pedido(s)</small>
+        </div>
+        <div class="u-acoes">
+          <button type="button" class="btn sm" data-a="senha">Senha</button>
+          ${eu ? "" : `<button type="button" class="btn sm perigo" data-a="excluir">Excluir</button>`}
+        </div>`;
+      li.querySelector('[data-a="senha"]').onclick = async () => {
+        const nova = prompt(`Nova senha para "${u.usuario}" (mín. 6 caracteres):`);
+        if (nova === null) return;
+        try { await api("PUT", "api/usuarios/" + u.id, { senha: nova }); toast("Senha alterada ✔"); }
+        catch (err) { toast(err.status ? err.message : "Sem conexão com o servidor"); }
+      };
+      const ex = li.querySelector('[data-a="excluir"]');
+      if (ex) ex.onclick = async () => {
+        if (!confirm(`Excluir o usuário "${u.usuario}"? Os ${u.pedidos} pedido(s) dele também serão apagados. Isso não pode ser desfeito.`)) return;
+        try { await api("DELETE", "api/usuarios/" + u.id); toast("Usuário excluído"); carregarUsuarios(); }
+        catch (err) { toast(err.status ? err.message : "Sem conexão com o servidor"); }
+      };
+      ul.appendChild(li);
+    });
+  } catch (err) {
+    ul.innerHTML = `<li class="nada">${err.status ? esc(err.message) : "Sem conexão com o servidor."}</li>`;
+  }
+}
+
+$("btnUsuarios").addEventListener("click", () => {
+  $("dlgConta").close();
+  $("dlgUsuarios").showModal();
+  carregarUsuarios();
+});
+$("btnFecharUsuarios").addEventListener("click", () => $("dlgUsuarios").close());
+
+$("formNovoUsuario").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("POST", "api/usuarios", {
+      nome: $("nuNome").value, usuario: $("nuUsuario").value,
+      senha: $("nuSenha").value, admin: $("nuAdmin").checked,
+    });
+    toast(`Usuário "${$("nuUsuario").value.trim().toLowerCase()}" criado ✔`);
+    $("formNovoUsuario").reset();
+    carregarUsuarios();
+  } catch (err) {
+    toast(err.status ? err.message : "Sem conexão com o servidor");
+  }
+});
 
 // Envia pedidos pendentes, baixa todos do banco e sincroniza a lista de cores.
 function sincronizar() {
@@ -157,7 +356,7 @@ function sincronizar() {
         salvar(); // banco ainda sem cores: envia as deste celular
       }
     } catch (e) {
-      if (e.message !== "sem-codigo") console.warn("Sincronização falhou:", e);
+      if (e.message !== "sem-sessao") console.warn("Sincronização falhou:", e);
     } finally {
       sincronizando = null;
       atualizarStatus();
@@ -193,13 +392,21 @@ function atualizarStatus() {
   } else if (pend) {
     el.textContent = `${pend} pedido(s) aguardando internet para ir ao servidor. Eles já estão guardados neste celular.`;
   } else {
-    el.textContent = "Pedidos guardados no servidor e compartilhados entre os celulares.";
+    el.textContent = "Pedidos guardados no servidor. Só você vê os seus pedidos, de qualquer celular em que entrar.";
   }
 }
 
-window.addEventListener("online", () => sincronizar());
+// Quando a internet volta ou o app volta para a frente: reconecta e sincroniza.
+async function aoVoltar() {
+  if (!state || !$("telaLogin").hidden) return;
+  if (servidor) return sincronizar();
+  const r = await conectar();
+  if (r === "ok") sincronizar();
+  else if (r === "login" && usuario) mostrarLogin("Sua sessão terminou. Entre de novo.");
+}
+window.addEventListener("online", aoVoltar);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") sincronizar();
+  if (document.visibilityState === "visible") aoVoltar();
 });
 
 // ================= Utilidades =================
@@ -261,6 +468,9 @@ function esc(s) {
 let toastTimer;
 function toast(msg) {
   const t = $("toast");
+  // se houver uma janela aberta, o aviso precisa ficar dentro dela para aparecer por cima
+  const dlg = document.querySelector("dialog[open]");
+  (dlg || document.body).appendChild(t);
   t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), 2400);
@@ -950,9 +1160,7 @@ $("btnExcelTodos").addEventListener("click", exportarExcelTodos);
 $("btnBackup").addEventListener("click", fazerBackup);
 $("btnRestaurarBackup").addEventListener("click", () => $("arquivoBackup").click());
 
-preencherCampos();
-render();
-iniciarServidor();
+iniciar();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

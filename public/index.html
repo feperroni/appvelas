@@ -15,8 +15,13 @@
 <body data-tab="pedido">
   <header class="topbar" id="topbar">
     <div class="topbar-inner">
-      <h1>Pedido de Velas</h1>
-      <div class="totals" id="totals">Palito: 0 · 7 Dias: 0</div>
+      <div>
+        <h1>Pedido de Velas</h1>
+        <div class="totals" id="totals">Palito: 0 · 7 Dias: 0</div>
+      </div>
+      <button type="button" class="conta-btn" id="btnConta" hidden aria-label="Minha conta">
+        <span class="avatar" id="contaInicial">?</span>
+      </button>
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="pedido" aria-selected="true">Pedido</button>
@@ -163,6 +168,57 @@
       <button type="button" class="btn ghost" id="btnFecharTexto">Fechar</button>
       <button type="button" class="btn" id="btnCompartilharTexto">Enviar…</button>
       <button type="button" class="btn primary" id="btnCopiarTexto">Copiar</button>
+    </div>
+  </dialog>
+
+  <!-- ===== LOGIN ===== -->
+  <div class="login" id="telaLogin" hidden>
+    <form class="login-card" id="formLogin">
+      <img src="icon.svg" alt="" width="64" height="64">
+      <h1>Pedido de Velas</h1>
+      <label>Usuário
+        <input type="text" id="loginUsuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label>Senha
+        <input type="password" id="loginSenha" autocomplete="current-password" required>
+      </label>
+      <p class="erro" id="loginErro" hidden></p>
+      <button type="submit" class="btn primary" id="btnEntrar">Entrar</button>
+    </form>
+  </div>
+
+  <!-- ===== CONTA ===== -->
+  <dialog id="dlgConta" class="dlg">
+    <h2 id="contaNome">Minha conta</h2>
+    <p class="ajuda" id="contaLogin"></p>
+    <form id="formSenha" class="form-grade">
+      <h3>Trocar senha</h3>
+      <input type="password" id="senhaAtual" placeholder="Senha atual" autocomplete="current-password" required>
+      <input type="password" id="senhaNova" placeholder="Nova senha (mín. 6)" autocomplete="new-password" minlength="6" required>
+      <button type="submit" class="btn">Salvar nova senha</button>
+    </form>
+    <div class="dlg-acoes">
+      <button type="button" class="btn" id="btnUsuarios" hidden>Usuários</button>
+      <button type="button" class="btn perigo" id="btnSair">Sair</button>
+      <button type="button" class="btn ghost" id="btnFecharConta">Fechar</button>
+    </div>
+  </dialog>
+
+  <!-- ===== USUÁRIOS (admin) ===== -->
+  <dialog id="dlgUsuarios" class="dlg">
+    <h2>Usuários</h2>
+    <p class="ajuda">Cada usuário vê apenas os próprios pedidos.</p>
+    <ul class="usuarios" id="listaUsuarios"></ul>
+    <form id="formNovoUsuario" class="form-grade">
+      <h3>Novo usuário</h3>
+      <input type="text" id="nuNome" placeholder="Nome (ex.: Terreiro Pai João)" maxlength="100">
+      <input type="text" id="nuUsuario" placeholder="Usuário para login (ex.: paijoao)" autocapitalize="none" spellcheck="false" required>
+      <input type="password" id="nuSenha" placeholder="Senha (mín. 6)" autocomplete="new-password" minlength="6" required>
+      <label class="check"><input type="checkbox" id="nuAdmin"> Administrador (pode gerenciar usuários)</label>
+      <button type="submit" class="btn primary">Criar usuário</button>
+    </form>
+    <div class="dlg-acoes">
+      <button type="button" class="btn ghost" id="btnFecharUsuarios">Fechar</button>
     </div>
   </dialog>
 
