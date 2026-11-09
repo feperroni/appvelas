@@ -60,12 +60,13 @@ function carregar() {
 }
 
 function salvar() {
+  const cores = state.cores.map(({ nome, css }) => ({ nome, css }));
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      cores: state.cores.map(({ nome, css }) => ({ nome, css })),
-      qtd: state.qtd, cliente: state.cliente, obs: state.obs,
+      cores, qtd: state.qtd, cliente: state.cliente, obs: state.obs,
     }));
   } catch (e) {}
+  enviarCoresSeMudou(cores);
 }
 
 function carregarHistorico() {
@@ -84,6 +85,116 @@ function salvarHistorico() {
     return false;
   }
 }
+
+// ================= Servidor (Postgres) =================
+// Se o app estiver rodando com o servidor (Railway), os pedidos e as cores ficam
+// no banco e são compartilhados entre os celulares. Sem servidor (ex.: GitHub Pages),
+// tudo continua funcionando só no próprio celular.
+const PIN_KEY = "pedidoVelas.pin";
+let servidor = false;
+let sincronizando = null;
+let ultimasCoresEnviadas = null;
+let timerCores;
+
+async function api(metodo, url, corpo, tentouPin) {
+  let pin = "";
+  try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) {}
+  const r = await fetch(url, {
+    method: metodo,
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", "X-App-Pin": pin },
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+  if (r.status === 401) {
+    const novo = prompt(tentouPin ? "Código incorreto. Digite o código de acesso:" : "Digite o código de acesso do app:");
+    if (novo === null) throw new Error("sem-codigo");
+    try { localStorage.setItem(PIN_KEY, novo.trim()); } catch (e) {}
+    return api(metodo, url, corpo, true);
+  }
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+async function iniciarServidor() {
+  try {
+    const r = await fetch("api/saude", { cache: "no-store" });
+    servidor = r.ok && (await r.json()).ok === true;
+  } catch (e) { servidor = false; }
+  atualizarStatus();
+  if (servidor) await sincronizar();
+}
+
+// Envia pedidos pendentes, baixa todos do banco e sincroniza a lista de cores.
+function sincronizar() {
+  if (!servidor) return Promise.resolve();
+  if (sincronizando) return sincronizando;
+  sincronizando = (async () => {
+    try {
+      const pendentes = pedidos.filter((p) => !p.salvo);
+      if (pendentes.length) {
+        await api("POST", "api/pedidos", { pedidos: pendentes.map(semMarcas) });
+        pendentes.forEach((p) => (p.salvo = true));
+      }
+      const remotos = await api("GET", "api/pedidos");
+      const ainda = pedidos.filter((p) => !p.salvo);
+      pedidos = [...remotos.map((p) => ({ ...p, salvo: true })), ...ainda];
+      salvarHistorico();
+
+      const { cores } = await api("GET", "api/cores");
+      if (Array.isArray(cores) && cores.length) {
+        ultimasCoresEnviadas = JSON.stringify(cores);
+        state.cores = cores;
+        salvar();
+        if (document.body.dataset.tab === "pedido") render();
+      } else {
+        ultimasCoresEnviadas = null;
+        salvar(); // banco ainda sem cores: envia as deste celular
+      }
+    } catch (e) {
+      if (e.message !== "sem-codigo") console.warn("Sincronização falhou:", e);
+    } finally {
+      sincronizando = null;
+      atualizarStatus();
+      const aba = document.body.dataset.tab;
+      if (aba === "historico") renderHistorico();
+      if (aba === "estatisticas") renderEstatisticas();
+    }
+  })();
+  return sincronizando;
+}
+
+function enviarCoresSeMudou(cores) {
+  if (!servidor) return;
+  const json = JSON.stringify(cores);
+  if (json === ultimasCoresEnviadas) return;
+  clearTimeout(timerCores);
+  timerCores = setTimeout(async () => {
+    try {
+      await api("PUT", "api/cores", { cores });
+      ultimasCoresEnviadas = json;
+    } catch (e) { console.warn("Não foi possível enviar as cores:", e); }
+  }, 800);
+}
+
+const semMarcas = ({ salvo, ...p }) => p;
+
+function atualizarStatus() {
+  const el = $("statusDados");
+  if (!el) return;
+  const pend = pedidos.filter((p) => !p.salvo).length;
+  if (!servidor) {
+    el.textContent = "Os pedidos ficam guardados só neste celular. Faça um backup de vez em quando para não perder nada.";
+  } else if (pend) {
+    el.textContent = `${pend} pedido(s) aguardando internet para ir ao servidor. Eles já estão guardados neste celular.`;
+  } else {
+    el.textContent = "Pedidos guardados no servidor e compartilhados entre os celulares.";
+  }
+}
+
+window.addEventListener("online", () => sincronizar());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") sincronizar();
+});
 
 // ================= Utilidades =================
 const somaItens = (l) => l.reduce((a, [, n]) => a + n, 0);
@@ -243,13 +354,17 @@ function temItens() {
 function guardarPedido() {
   if (!temItens()) return;
   const p = pedidoAtual();
-  p.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  p.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  p.salvo = false; // ainda não foi para o servidor
   pedidos.push(p);
   if (!salvarHistorico()) { pedidos.pop(); return; }
   // começa um pedido novo (o cliente fica, pois costuma ser o mesmo)
   state.qtd = {}; state.obs = ""; $("obs").value = "";
   salvar(); render();
   toast("Pedido guardado no Histórico ✔");
+  sincronizar().then(() => {
+    if (servidor && !p.salvo) toast("Sem internet: o pedido será enviado depois");
+  });
 }
 
 // ================= Exportar =================
@@ -396,9 +511,13 @@ function renderHistorico() {
     li.querySelector('[data-a="pdf"]').onclick = () => exportarPdf(p);
     li.querySelector('[data-a="excel"]').onclick = () => exportarExcel(p);
     li.querySelector('[data-a="repetir"]').onclick = () => repetirPedido(p);
-    li.querySelector('[data-a="excluir"]').onclick = () => {
+    li.querySelector('[data-a="excluir"]').onclick = async () => {
       if (!confirm(`Excluir o pedido de ${formatarData(p.data, true)}? Isso não pode ser desfeito.`)) return;
-      pedidos = pedidos.filter((x) => x !== p);
+      if (servidor && p.salvo) {
+        try { await api("DELETE", "api/pedidos/" + encodeURIComponent(p.id)); }
+        catch (e) { return toast("Sem conexão com o servidor. Tente de novo."); }
+      }
+      pedidos = pedidos.filter((x) => x.id !== p.id);
       salvarHistorico(); renderHistorico();
       toast("Pedido excluído");
     };
@@ -423,7 +542,7 @@ function repetirPedido(p) {
 
 function fazerBackup() {
   if (!pedidos.length) return toast("Nenhum pedido guardado");
-  const dados = { app: "pedido-velas", versao: 1, criadoEm: new Date().toISOString(), pedidos };
+  const dados = { app: "pedido-velas", versao: 1, criadoEm: new Date().toISOString(), pedidos: pedidos.map(semMarcas) };
   const blob = new Blob([JSON.stringify(dados, null, 1)], { type: "application/json" });
   entregar(blob, `backup-pedidos-velas-${nomeArquivo("json").slice(13)}`);
 }
@@ -441,9 +560,10 @@ $("arquivoBackup").addEventListener("change", async (e) => {
     const novos = validos.filter((p) => !ids.has(p.id));
     if (!novos.length) return toast("Nenhum pedido novo nesse backup");
     if (!confirm(`Adicionar ${novos.length} pedido(s) do backup ao histórico?`)) return;
-    pedidos.push(...novos);
+    pedidos.push(...novos.map((p) => ({ ...semMarcas(p), salvo: false })));
     salvarHistorico(); renderHistorico();
     toast(`${novos.length} pedido(s) restaurado(s)`);
+    sincronizar();
   } catch (err) {
     toast("Arquivo de backup inválido");
   }
@@ -621,6 +741,7 @@ $("btnBackup").addEventListener("click", fazerBackup);
 $("btnRestaurarBackup").addEventListener("click", () => $("arquivoBackup").click());
 
 render();
+iniciarServidor();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

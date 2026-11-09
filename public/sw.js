@@ -1,5 +1,5 @@
 // Service worker: guarda o app no celular para funcionar sem internet.
-const CACHE = "pedido-velas-v4";
+const CACHE = "pedido-velas-v5";
 const ARQUIVOS = [
   "./",
   "index.html",
@@ -29,6 +29,7 @@ self.addEventListener("activate", (e) => {
 // Rede primeiro (pega atualizações), cache se estiver offline.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  if (new URL(e.request.url).pathname.includes("/api/")) return; // dados sempre do servidor
   e.respondWith(
     fetch(e.request)
       .then((resp) => {
