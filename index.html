@@ -12,13 +12,21 @@
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <header class="topbar">
-    <h1>Pedido de Velas</h1>
-    <div class="totals" id="totals">Palito: 0 · 7 Dias: 0</div>
+<body data-tab="pedido">
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <h1>Pedido de Velas</h1>
+      <div class="totals" id="totals">Palito: 0 · 7 Dias: 0</div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="pedido" aria-selected="true">Pedido</button>
+      <button role="tab" data-tab="historico" aria-selected="false">Histórico</button>
+      <button role="tab" data-tab="estatisticas" aria-selected="false">Estatísticas</button>
+    </nav>
   </header>
 
-  <main>
+  <!-- ===== PEDIDO ===== -->
+  <main class="tab-panel" id="tab-pedido">
     <section class="order-info">
       <label>Cliente / Terreiro
         <input type="text" id="cliente" placeholder="Nome (opcional)" autocomplete="off">
@@ -37,14 +45,73 @@
 
     <form id="addForm" class="add-color">
       <input type="text" id="novaCor" placeholder="Adicionar outra cor..." autocomplete="off">
-      <button type="submit">+</button>
+      <button type="submit" aria-label="Adicionar cor">+</button>
     </form>
     <button type="button" id="btnRestaurar" class="link-btn">Restaurar cores padrão</button>
   </main>
 
-  <footer class="actions">
+  <!-- ===== HISTÓRICO ===== -->
+  <main class="tab-panel" id="tab-historico" hidden>
+    <p class="vazio" id="histVazio">Nenhum pedido guardado ainda.<br>Preencha um pedido e toque em <b>Guardar</b>.</p>
+    <ul id="historico" class="historico"></ul>
+
+    <section class="caixa">
+      <h2>Arquivo e backup</h2>
+      <p class="ajuda">Os pedidos ficam guardados só neste celular. Faça um backup de vez em quando para não perder nada.</p>
+      <div class="grade-botoes">
+        <button type="button" class="btn" id="btnExcelTodos">Excel com todos</button>
+        <button type="button" class="btn" id="btnBackup">Fazer backup</button>
+        <button type="button" class="btn ghost" id="btnRestaurarBackup">Restaurar backup</button>
+      </div>
+      <input type="file" id="arquivoBackup" accept=".json,application/json" hidden>
+    </section>
+  </main>
+
+  <!-- ===== ESTATÍSTICAS ===== -->
+  <main class="tab-panel" id="tab-estatisticas" hidden>
+    <label class="periodo">Período
+      <select id="periodo">
+        <option value="12m">Últimos 12 meses</option>
+        <option value="ano">Este ano</option>
+        <option value="anoPassado">Ano passado</option>
+        <option value="tudo">Tudo</option>
+      </select>
+    </label>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section class="caixa">
+      <h2>Pedidos por mês</h2>
+      <div id="chartPedidos"></div>
+    </section>
+
+    <section class="caixa">
+      <h2>Velas por mês</h2>
+      <div class="legenda">
+        <span><i class="chip s-palito"></i>Palito</span>
+        <span><i class="chip s-dias"></i>7 Dias</span>
+      </div>
+      <div id="chartVelas"></div>
+    </section>
+
+    <section class="caixa">
+      <h2>Cores mais pedidas</h2>
+      <div class="segmented" id="rankTipo">
+        <button type="button" data-tipo="todos" aria-pressed="true">Todas</button>
+        <button type="button" data-tipo="palito" aria-pressed="false">Palito</button>
+        <button type="button" data-tipo="dias" aria-pressed="false">7 Dias</button>
+      </div>
+      <div class="legenda">
+        <span><i class="chip s-palito"></i>Palito</span>
+        <span><i class="chip s-dias"></i>7 Dias</span>
+      </div>
+      <ol class="ranking" id="ranking"></ol>
+    </section>
+  </main>
+
+  <footer class="actions" id="acoesPedido">
     <button id="btnLimpar" class="btn ghost">Limpar</button>
-    <button id="btnSalvar" class="btn">Salvar</button>
+    <button id="btnGuardar" class="btn">Guardar</button>
     <button id="btnPdf" class="btn primary">PDF</button>
     <button id="btnExcel" class="btn primary">Excel</button>
   </footer>

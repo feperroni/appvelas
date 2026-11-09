@@ -8,6 +8,10 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 - Adicionar cores, editar o nome (✎) ou remover (✕) qualquer cor. O link "Restaurar cores padrão" volta à lista original.
 - **PDF**: as duas tabelas lado a lado, só com as cores preenchidas, com totais.
 - **Excel**: aba `Palito` e aba `7 Dias`, com totais.
+- **Guardar**: salva o pedido no **Histórico** e começa um novo.
+- **Histórico**: ver cada pedido, exportar de novo (PDF/Excel), repetir ou excluir. Excel com todos os pedidos, backup e restauração.
+- **Estatísticas**: total de pedidos e velas, média por pedido, pedidos por mês, velas por mês (Palito × 7 Dias) e cores mais pedidas, com filtro de período.
+- Os dados ficam guardados no próprio celular (não são compartilhados entre aparelhos). Use o backup para não perder.
 - No celular, o botão de exportar abre o menu de compartilhar (WhatsApp, e-mail, Drive...).
 - Funciona offline depois do primeiro acesso e pode ser instalado na tela inicial.
 
