@@ -22,7 +22,10 @@ App para celular para montar pedidos de velas: cada cor tem um campo de quantida
 - **Criar conta**: a pessoa escolhe usuário e senha e já entra. **Entrar**: para quem já tem conta.
 - A pessoa fica conectada no celular por 180 dias. No **círculo com a inicial** (canto superior direito) ela troca a senha ou **Sai**. Ao sair, os dados dela são apagados do celular (continuam no servidor).
 - Usuário: 3 a 40 letras/números, sem espaços (pode usar ponto, hífen ou `_`). Senha: mínimo 6 caracteres.
-- **Não há recuperação de senha.** Quem esquecer a senha precisa criar outra conta.
+- **Esqueceu a senha?** O dono do app abre `https://SEU-LINK/recuperar.html`, digita a senha de dono (`DONO_SENHA`) e vê a senha do amigo (ou toca em "Ver usuários" para escolher na lista). A página não aparece no app; só quem sabe o endereço e a senha de dono usa.
+  - No banco, a senha fica **cifrada** com uma chave que vem de `DONO_SENHA`. Sem essa variável, ninguém consegue ler as senhas, nem com acesso ao banco.
+  - Contas criadas antes desta função: a senha fica disponível depois do próximo login da pessoa.
+  - Se você trocar a `DONO_SENHA`, as senhas guardadas com a antiga só voltam a aparecer depois que cada pessoa entrar de novo.
 - Pedidos que existiam antes do login ficam com o primeiro usuário cadastrado.
 
 ## Estrutura
@@ -38,6 +41,7 @@ As tabelas do banco (`usuarios`, `sessoes`, `pedidos` e `config`) são criadas a
 2. No mesmo projeto: **+ Create → Database → PostgreSQL**.
 3. Abra o serviço do app → aba **Variables** e adicione:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referência ao banco criado no passo 2)
+   - `DONO_SENHA` = uma senha forte só sua, para recuperar a senha de amigos em `/recuperar.html`
 4. Aba **Settings → Networking → Generate Domain** para ganhar o link público (`https://....up.railway.app`).
 5. Abra o link no celular, toque em **Criar conta** e instale na tela inicial.
 
@@ -50,6 +54,7 @@ Os pedidos que já estavam guardados no celular são enviados para a conta do pr
 | Variável | Obrigatória | Para quê |
 |---|---|---|
 | `DATABASE_URL` | sim | conexão do Postgres |
+| `DONO_SENHA` | não (recomendada) | senha do dono para ver a senha de um usuário em `/recuperar.html` |
 | `PGSSL` | não | `true` para usar SSL (só se usar a URL pública do banco) |
 | `PORT` | não | o Railway define sozinho |
 
@@ -66,4 +71,4 @@ Depois abra `http://localhost:3000`.
 
 ## Mudar a lista padrão de cores
 Edite `CORES_PADRAO` no topo de `public/app.js`. (Com o servidor, a lista usada é a que está no banco; o link "Restaurar cores padrão" aplica a lista do código.)
-Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v8` → `v9`) para os celulares pegarem a atualização.
+Ao alterar arquivos de `public/`, troque também a versão em `public/sw.js` (`pedido-velas-v9` → `v10`) para os celulares pegarem a atualização.

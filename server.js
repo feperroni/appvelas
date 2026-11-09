@@ -5,6 +5,7 @@
 //
 // Variáveis de ambiente:
 //   DATABASE_URL   (obrigatória) conexão do Postgres. No Railway: ${{Postgres.DATABASE_URL}}
+//   DONO_SENHA     (opcional)    senha do dono para ver a senha de um usuário em /recuperar.html
 //   PGSSL=true     (opcional)    usa SSL na conexão (necessário só com a URL pública do banco)
 //   PORT           definida pelo Railway automaticamente
 import express from "express";
@@ -19,6 +20,34 @@ const PORT = Number(process.env.PORT) || 3000;
 const COOKIE = "velas_sessao";
 const SESSAO_DIAS = 180;
 const scrypt = promisify(crypto.scrypt);
+
+// ---------- senha legível para o dono (recuperação) ----------
+// Além do hash (usado para conferir o login), a senha é guardada cifrada com uma
+// chave derivada de DONO_SENHA. Só quem sabe DONO_SENHA consegue ler, pela página
+// /recuperar.html. Sem DONO_SENHA, nada é guardado em forma legível.
+const DONO_SENHA = process.env.DONO_SENHA || "";
+const CHAVE_DONO = DONO_SENHA ? crypto.scryptSync(DONO_SENHA, "pedido-velas:dono", 32) : null;
+
+function cifrar(texto) {
+  if (!CHAVE_DONO) return null;
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", CHAVE_DONO, iv);
+  const dados = Buffer.concat([c.update(texto, "utf8"), c.final()]);
+  return ["v1", iv.toString("base64"), c.getAuthTag().toString("base64"), dados.toString("base64")].join(":");
+}
+
+function decifrar(guardado) {
+  if (!CHAVE_DONO || !guardado) return null;
+  try {
+    const [v, iv, tag, dados] = guardado.split(":");
+    if (v !== "v1") return null;
+    const d = crypto.createDecipheriv("aes-256-gcm", CHAVE_DONO, Buffer.from(iv, "base64"));
+    d.setAuthTag(Buffer.from(tag, "base64"));
+    return Buffer.concat([d.update(Buffer.from(dados, "base64")), d.final()]).toString("utf8");
+  } catch (e) {
+    return null; // cifrada com outra DONO_SENHA
+  }
+}
 
 if (!process.env.DATABASE_URL) {
   console.error("Erro: defina a variável DATABASE_URL com a conexão do Postgres.");
@@ -93,6 +122,7 @@ async function prepararBanco() {
           dias      JSONB NOT NULL DEFAULT '[]',
           criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha_cifrada TEXT;
         ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS financeiro JSONB;
         ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT '';
         ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now();
@@ -205,6 +235,39 @@ async function criarSessao(req, res, usuarioId) {
 
 app.get("/api/saude", (req, res) => res.json({ ok: true, login: true }));
 
+// Página do dono (/recuperar.html): com DONO_SENHA, vê a senha de um usuário
+// ou, sem informar usuário, a lista de usuários cadastrados.
+app.post("/api/dono/ver-senha", ok(async (req, res) => {
+  const ip = req.ip;
+  if (!CHAVE_DONO) return res.status(503).json({ erro: "Recuperação desligada: defina DONO_SENHA no Railway." });
+  if (bloqueado(ip)) return res.status(429).json({ erro: "Muitas tentativas. Aguarde 15 minutos." });
+  const enviado = Buffer.from(String(req.body?.dono || ""));
+  const certo = Buffer.from(DONO_SENHA);
+  if (enviado.length !== certo.length || !crypto.timingSafeEqual(enviado, certo)) {
+    registrarFalha(ip);
+    return res.status(401).json({ erro: "Senha de dono incorreta" });
+  }
+  tentativas.delete(ip);
+  const login = normalizarLogin(req.body?.usuario);
+  if (!login) {
+    const { rows } = await pool.query(
+      `SELECT u.usuario, u.criado_em, count(p.id)::int AS pedidos
+       FROM usuarios u LEFT JOIN pedidos p ON p.usuario_id = u.id
+       GROUP BY u.id ORDER BY u.usuario`);
+    return res.json({ usuarios: rows });
+  }
+  const { rows } = await pool.query("SELECT usuario, senha_cifrada FROM usuarios WHERE usuario = $1", [login]);
+  if (!rows[0]) return res.status(404).json({ erro: `Usuário "${login}" não encontrado` });
+  const senha = decifrar(rows[0].senha_cifrada);
+  if (senha == null) {
+    return res.json({
+      usuario: rows[0].usuario, senha: null,
+      aviso: "Senha ainda não disponível: essa conta não entrou no app desde que a recuperação foi ligada (ou DONO_SENHA foi trocada). Ela fica disponível no próximo login da pessoa.",
+    });
+  }
+  res.json({ usuario: rows[0].usuario, senha });
+}));
+
 // Limite simples de tentativas de login (por IP), para dificultar adivinhar senhas.
 const tentativas = new Map();
 function bloqueado(ip) {
@@ -230,6 +293,10 @@ app.post("/api/login", ok(async (req, res) => {
     return res.status(401).json({ erro: "Usuário ou senha incorretos" });
   }
   tentativas.delete(ip);
+  // contas antigas: guarda a senha cifrada no primeiro login (ou se DONO_SENHA mudou)
+  if (CHAVE_DONO && decifrar(u.senha_cifrada) !== senha) {
+    await pool.query("UPDATE usuarios SET senha_cifrada = $1 WHERE id = $2", [cifrar(senha), u.id]);
+  }
   await criarSessao(req, res, u.id);
   res.json(publicoUsuario(u));
 }));
@@ -252,9 +319,9 @@ app.post("/api/cadastro", ok(async (req, res) => {
     return res.status(400).json({ erro: "A senha precisa ter pelo menos 6 caracteres" });
   }
   const r = await pool.query(
-    `INSERT INTO usuarios (usuario, nome, senha_hash) VALUES ($1, $1, $2)
+    `INSERT INTO usuarios (usuario, nome, senha_hash, senha_cifrada) VALUES ($1, $1, $2, $3)
      ON CONFLICT (usuario) DO NOTHING RETURNING id, usuario`,
-    [login, await gerarHash(senha)]
+    [login, await gerarHash(senha), cifrar(senha)]
   );
   if (!r.rowCount) return res.status(409).json({ erro: "Esse usuário já existe. Escolha outro ou toque em Entrar." });
   if (!c || Date.now() - c.inicio >= 60 * 60_000) cadastros.set(ip, { inicio: Date.now(), n: 1 });
@@ -295,7 +362,8 @@ app.post("/api/senha", ok(async (req, res) => {
   if (typeof nova !== "string" || nova.length < 6) {
     return res.status(400).json({ erro: "A nova senha precisa ter pelo menos 6 caracteres" });
   }
-  await pool.query("UPDATE usuarios SET senha_hash = $1 WHERE id = $2", [await gerarHash(nova), req.usuario.id]);
+  await pool.query("UPDATE usuarios SET senha_hash = $1, senha_cifrada = $2 WHERE id = $3",
+    [await gerarHash(nova), cifrar(nova), req.usuario.id]);
   // encerra as outras sessões deste usuário
   await pool.query("DELETE FROM sessoes WHERE usuario_id = $1 AND token_hash <> $2",
     [req.usuario.id, sha256(lerCookie(req, COOKIE))]);

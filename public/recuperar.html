@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#5b2a86">
+  <title>Recuperar acesso</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .rec { max-width: 420px; margin: 0 auto; padding: calc(20px + env(safe-area-inset-top)) 16px 32px; }
+    .rec h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    .rec form { display: grid; gap: 12px; margin-top: 14px; }
+    .rec label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+    .rec input {
+      width: 100%; padding: 12px; font-size: 1rem;
+      border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
+    }
+    .rec .botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rec .btn { padding: 13px; font-size: .95rem; }
+    .resultado { margin-top: 16px; }
+    .senha-box {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--primary);
+    }
+    .senha-box code { font-size: 1.2rem; font-weight: 700; overflow-wrap: anywhere; }
+    .lista-usuarios { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .lista-usuarios button {
+      width: 100%; display: flex; justify-content: space-between; gap: 10px; text-align: left;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--card); color: var(--text); font-size: .95rem; cursor: pointer;
+    }
+    .lista-usuarios small { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="rec">
+    <h1>Recuperar acesso (dono)</h1>
+    <p class="ajuda">Página só para o dono do app. Use a senha de dono (variável <b>DONO_SENHA</b> do Railway) para ver a senha de um amigo que esqueceu.</p>
+
+    <form id="form">
+      <label>Sua senha de dono
+        <input type="password" id="dono" autocomplete="off" required>
+      </label>
+      <label>Usuário do amigo
+        <input type="text" id="usuario" autocapitalize="none" spellcheck="false" autocomplete="off" placeholder="ex.: paijoao">
+      </label>
+      <div class="botoes">
+        <button type="button" class="btn" id="btnLista">Ver usuários</button>
+        <button type="submit" class="btn primary">Ver senha</button>
+      </div>
+    </form>
+
+    <div class="resultado" id="resultado" aria-live="polite"></div>
+    <p class="ajuda" style="margin-top:18px"><a href="./">Voltar para o app</a></p>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const out = $("resultado");
+
+    async function consultar(usuario) {
+      out.innerHTML = '<p class="ajuda">Consultando...</p>';
+      try {
+        const r = await fetch("api/dono/ver-senha", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dono: $("dono").value, usuario }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { out.innerHTML = `<p class="erro">${esc(d.erro || "Erro " + r.status)}</p>`; return; }
+        if (d.usuarios) {
+          out.innerHTML = d.usuarios.length
+            ? `<ul class="lista-usuarios">${d.usuarios.map((u) =>
+                `<li><button type="button" data-u="${esc(u.usuario)}"><b>${esc(u.usuario)}</b><small>${u.pedidos} pedido(s)</small></button></li>`).join("")}</ul>
+               <p class="ajuda">Toque em um usuário para ver a senha.</p>`
+            : '<p class="ajuda">Nenhum usuário cadastrado ainda.</p>';
+          out.querySelectorAll("[data-u]").forEach((b) => b.addEventListener("click", () => {
+            $("usuario").value = b.dataset.u;
+            consultar(b.dataset.u);
+          }));
+          return;
+        }
+        if (d.senha == null) { out.innerHTML = `<p class="erro">${esc(d.aviso)}</p>`; return; }
+        out.innerHTML = `
+          <p class="ajuda">Senha de <b>${esc(d.usuario)}</b>:</p>
+          <div class="senha-box"><code id="senha">${esc(d.senha)}</code>
+            <button type="button" class="btn sm" id="copiar">Copiar</button></div>`;
+        $("copiar").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(d.senha); $("copiar").textContent = "Copiada ✔"; } catch (e) {}
+        });
+      } catch (e) {
+        out.innerHTML = '<p class="erro">Sem conexão com o servidor.</p>';
+      }
+    }
+
+    $("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const u = $("usuario").value.trim();
+      if (!u) { out.innerHTML = '<p class="erro">Digite o usuário do amigo ou toque em "Ver usuários".</p>'; return; }
+      consultar(u);
+    });
+    $("btnLista").addEventListener("click", () => {
+      if (!$("dono").value) { out.innerHTML = '<p class="erro">Digite sua senha de dono.</p>'; return; }
+      consultar("");
+    });
+  </script>
+</body>
+</html>
